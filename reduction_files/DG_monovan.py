@@ -28,7 +28,7 @@ monovan_bg    = None                        #background for mono van
 Ei_list       = [55]                        #incident energies - from PyChop
 monovan_trans = [1]                         #transmission for each Ei
 monovan_temp  = 300                         #vanadium temperature (K) for Debye-Waller correction
-mask          = 'merlin_mask2021_1.xml'     #mask
+mask          = 'MASK_FILE_XML'             #mask
 wv_file       = 'WV_57083.txt'              #whitevan integrals file
 #=================================================================
 
@@ -38,12 +38,12 @@ wv_file       = 'WV_57083.txt'              #whitevan integrals file
 # MAPS monitors:    m2spec=41475, m3spec=41476 - fixei = False
 # LET monitors:     m2spec=98310, m3spec= None - fixei = True
 
-config['default.instrument'] = 'MERLIN'
-cycle = '21_1'
+config['default.instrument'] = 'INSTRUMENT_NAME'
+cycle = 'CYCLE_ID'
 m2spec  = 69636                 #specID of monitor2 (post monochromator)
 m3spec  = 69640                 #specID of monitor2 (post monochromator)
 fixei   = False                 #true for LET since no m3
-powdermap = 'rings_193.map'     #rings mapping file
+powdermap = 'RINGS_MAP_XML'     #rings mapping file
 monovan_range = 0.1             #integration range (+/- fraction of Ei)
 min_theta = 5.                  #minimum theta to avoid low Q detectors (SANS)
 idebug  = False                 #keep workspaces
@@ -54,7 +54,9 @@ if inst == 'MARI':
     source = 'Moderator'
 else:
     source = 'undulator'
-    
+
+if cycle.startswith('20'):
+    cycle = cycle[2:]
 datadir = '/archive/NDX'+inst+'/instrument/data/cycle_'+cycle+'/'
 mapdir  = '/usr/local/mprogs/InstrumentFiles/'+inst.swapcase()+'/'
 config.appendDataSearchDir(mapdir)
@@ -71,7 +73,7 @@ if mask not in ws_list:
     LoadMask(inst,mask,OutputWorkspace=mask)
 else:
     print(inst+": Using previously loaded hard mask - %s" % mask)
-    
+
 # load whitevan file
 if wv_file not in ws_list:
     print(inst+": Loading white vanadium - %s" % wv_file)
@@ -96,7 +98,7 @@ for ienergy in range(len(Ei_list)):
     Ei = Ei_list[ienergy]
     print("\n"+inst+" MONO_VAN: calibration factor for Ei=%g meV" % Ei)
     print("... summing  |\u0394E| < %.2f meV" %  (monovan_range*Ei))
-    
+
     mv_corrected = Scale('mv',1/tr,"Multiply")
     if (monovan_bg is not None):
         if iprint:
@@ -104,23 +106,23 @@ for ienergy in range(len(Ei_list)):
         mv_corrected = mv/tr - mv_bg
     mv_norm = Divide('mv_corrected',wv_file)
     MaskDetectors(mv_norm,MaskedWorkspace=mask)
-    
+
     mv_monitors = mtd['mv_monitors']
     spectra = mv_monitors.getSpectrumNumbers()
     index = spectra.index(m2spec)
     m2pos = mv.detectorInfo().position(index)[2]
-        
-# this section shifts the time-of-flight such that the monitor2 peak 
+
+# this section shifts the time-of-flight such that the monitor2 peak
 # in the current monitor workspace (post monochromator) is at t=0 and L=0
-# note that the offest is not the predicted value due to energy dependence of the source position        
-       
+# note that the offest is not the predicted value due to energy dependence of the source position
+
     if m3spec is not None and not fixei:
         (Ei,mon2_peak,_,_) = GetEi(mv_monitors,Monitor1Spec=m2spec,Monitor2Spec=m3spec,EnergyEstimate=Ei)
         print("... refined Ei=%.2f meV" % Ei)
     else:
         (Ei,mon2_peak,_,_) = GetEi(mv_monitors,Monitor2Spec=m2spec,EnergyEstimate=Ei,FixEi=fixei)
     print("... m2 tof=%.2f mus, m2 pos=%.2f m" % (mon2_peak,m2pos))
-            
+
     mv_norm = ScaleX(mv_norm, Factor=-mon2_peak, Operation='Add', InstrumentParameter='DelayTime', Combine=True)
     MoveInstrumentComponent(mv_norm, ComponentName=source, Z=m2pos, RelativePosition=False)
 
@@ -160,7 +162,7 @@ for ienergy in range(len(Ei_list)):
     print("... average over %.2f < |Q| < %.2f \u212B^-1" % (Qmin, Qmax))
     mv_out = CropWorkspace(mv_out,Qmin,Qmax)                 # extract data not contaminated by low Q, or Al Bragg peaks
     CloneWorkspace(mv_out,OutputWorkspace='elastic_monovan_'+str(Ei))
-    
+
 # =================================take averages of data=====================================
     signal = mv_out.dataY(0)
     mv_fac_unweighted = np.sum(signal) / len(signal)
@@ -169,7 +171,7 @@ for ienergy in range(len(Ei_list)):
     mv_fac_weighted = np.sum(np.multiply(weights,signal)) / np.sum(weights)
     print("... unweighted average: %.4f" % mv_fac_unweighted)
     print("... weighted average: %.4f" % mv_fac_weighted)
- 
+
     mv_fac.append(mv_fac_weighted)
 
 #get standard errors
@@ -184,7 +186,7 @@ SaveAscii(monovan_factors,ofile)
 # ==================================================================
 
 print(inst + " MONO_VAN: Reduction complete in %.1f seconds\n" % (time.time() - t))
-    
+
 # ==================================================================
 
 # cleanup
