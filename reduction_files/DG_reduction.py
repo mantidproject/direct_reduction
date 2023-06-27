@@ -36,30 +36,21 @@ mask           = "LET_mask_231.xml"          #hard mask
 
 #==================Absolute Units Inputs=================
 mv_file       = None        # pre-processed MV calibration
-monovan_mass  = 3.56        # mass of LET vanadium cylinder
 sample_mass   = 1           # mass of the sample
 sample_fwt    = 50.9415     # formula weight of sample
 #========================================================
 
 #==================Local Contact Inputs==================
-# MARI monitors:    m2spec=2,     m3spec=3     - fixei = False
-# MERLIN monitors:  m2spec=69636, m3spec=69640 - fixei = False
-# MAPS monitors:    m2spec=41475, m3spec=41476 - fixei = False
-# LET monitors:     m2spec=98310, m3spec= None - fixei = True
-
-config['default.instrument'] = 'LET'
-cycle   = '23_1'                #cycle number
-m2spec  = 98310                 #specID of monitor2 (pre-sample)
-m3spec  = None                  #specID of monitor3 (post-sample)
-fixei   = True                  #True for LET since no monitor 3
+inst = 'LET'
+cycle = '23_1'                  #cycle number
+fixei = True                    #True for LET since no monitor 3
 powdermap = 'LET_rings_222.xml' #rings mapping file - must be .xml format
 file_wait = 30                  #wait for data file to appear (seconds)
 keepworkspaces = True           #should be false for Horace scans
 saveformat = '.nxspe'           #format of output, ".nxspe", ".nxs"
 QENS = True                     #output Q-binned data for QENS data analysis "_red.nxs"
 Qbins = 20                      #approximate number of Q-bins for QENS
-
-idebug  = False                 #keep workspaces and check absolute units on elastic line
+idebug = False                  #keep workspaces and check absolute units on elastic line
 #========================================================
 
 #========================================================
@@ -67,7 +58,9 @@ def tryload(irun):             #loops till data file appears
     while True:
         try:
             ws = Load(str(irun),LoadMonitors=True)
-        except:
+        except TypeError:
+            ws = Load(str(irun),LoadMonitors='Separate')
+        except ValueError:
             print("...waiting for run #%i" % irun)
             time.sleep(file_wait)
             continue
@@ -75,13 +68,31 @@ def tryload(irun):             #loops till data file appears
 #========================================================
 
 # ==============================setup directroties================================
-inst = config['default.instrument']
+config['default.instrument'] = inst
 if inst == 'MARI':
     source = 'Moderator'
-else:
+    m2spec = 2                      #specID of monitor2 (pre-sample)
+    m3spec = 3                      #specID of monitor3 (post-sample)
+    monovan_mass = 32.58            #mass of vanadium cylinder
+elif inst == 'MERLIN':
     source = 'undulator'
+    m2spec = 69636                  #specID of monitor2 (pre-sample)
+    m3spec = 69640                  #specID of monitor3 (post-sample)
+    monovan_mass = 32.62            #mass of vanadium cylinder
+elif inst == 'MAPS':
+    source = 'undulator'
+    m2spec = 41475                  #specID of monitor2 (pre-sample)
+    m3spec = 41476                  #specID of monitor3 (post-sample)
+    monovan_mass = 30.1             #mass of vanadium cylinder
+elif inst == 'LET':
+    source = 'undulator'
+    m2spec = 98310                  #specID of monitor2 (pre-sample)
+    m3spec = None                   #specID of monitor3 (post-sample)
+    monovan_mass = 3.56             #mass of vanadium cylinder
+else:
+    raise RuntimeError(f'Unrecognised instrument: {inst}')
     
-datadir = '/archive/NDX'+inst+'/instrument/data/cycle_'+cycle+'/'
+datadir = '/archive/NDX'+inst+'/Instrument/data/cycle_'+cycle+'/'
 mapdir  = '/usr/local/mprogs/InstrumentFiles/'+inst.swapcase()+'/'
 config.appendDataSearchDir(mapdir)
 config.appendDataSearchDir(datadir)
@@ -93,7 +104,7 @@ print('Working directory... %s\n' % ConfigService.Instance().getString('defaults
 # ============================create lists if necessary==========================
 if type(sample) is not list:
     sample = [sample]
-if type(sample_bg) is not list:
+if type(sample_bg) is not list and sample_bg is not None:
     sample_bg = [sample_bg]
 
 #==================================load hard mask================================
@@ -177,8 +188,8 @@ for irun in sample:
     print("============")
     if not sumruns:  
         tryload(irun)
-        print("Loading run# %i" % irun)
-    if inst == 'MARI':
+        print(f"Loading run# {irun}")
+    if inst == 'MARI' and mtd['ws'].getNumberHistograms() > 918:
         ws = RemoveSpectra('ws',[0])
     ws = NormaliseByCurrent('ws')
 
@@ -244,7 +255,7 @@ for irun in sample:
             print("... powder grouping using %s" % powdermap)
 
 # output nxspe file
-        ofile = '{:s}{:d}_{:g}meV{:s}'.format(inst[:3],irun,origEi,ofile_suffix)
+        ofile = '{:s}{:s}_{:g}meV{:s}'.format(inst[:3],str(irun),origEi,ofile_suffix)
         
 # check elastic line (debug mode)
         if idebug:

@@ -24,19 +24,24 @@ t = time.time()         #start the clock
 whitevan       = 78715                  #white vanadium run
 whitevan_bg    = None                   #background for the white vanadium
 whitevan_trans = 1                      #transmission factor
+mask_file      = None                   #hardmask file (str or None)
 #========================================================
 
 #==================Local Contact Inputs==================
-config['default.instrument']='LET'   #instrument
+inst = 'LET'                            #instrument
 cycle = '22_1'                          #cycle
-wv_lrange = [1,5]                     #wavelength integration limits for output of vanadium integrals
+wv_lrange = [1,5]                       #wavelength integration limits for output of vanadium integrals
 wv_detrange = [30000,60000]             #spectrum index range for average intensity calculation
 idebug = False                          #keep itermediate workspaces for debugging
+mask_dir = None
+save_dir = '/instrument/'+inst+'/RBNumber/USER_RB_FOLDER'
 #========================================================
 
-inst = config['default.instrument']
-datadir = '/archive/NDX'+inst+'/instrument/data/cycle_'+cycle+'/'
-config.appendDataSearchDir(datadir)
+config['default.instrument'] = inst
+config['defaultsave.directory'] = save_dir
+data_dir = '/archive/NDX'+inst+'/instrument/data/cycle_'+cycle+'/'
+config.appendDataSearchDir(data_dir)
+config.appendDataSearchDir(save_dir)
 
 print("\n======= "+inst+" white van reduction =======")
 
@@ -56,8 +61,16 @@ print("... Calculating white vanadium integrals")
 print("... Summing between %.1f < \u03BB < %.1f \u212B" % (wv_lrange[0],wv_lrange[1]))
 WV_normalised_integrals = ConvertUnits(wv_corrected,'Wavelength')
 WV_normalised_integrals = Rebin(WV_normalised_integrals,str(wv_lrange[0])+',100,'+str(wv_lrange[1]))
-wv_normt = Transpose(WV_normalised_integrals); wv_normt = CropWorkspace(wv_normt,XMin=wv_detrange[0],Xmax=wv_detrange[1])
-wv_scale = Integration(wv_normt); scale_factor = len(wv_normt.dataY(0))/wv_scale.dataY(0)[0]
+if mask_file is not None:
+    if mask_dir is not None:
+        config.appendDataSearchDir(mask_dir)
+    LoadMask(inst, mask, OutputWorkspace=mask)
+    MaskDetectors(wv_normalised_integrals, MaskedWorkspace=mask)
+wv_normt = Transpose(WV_normalised_integrals)
+if wv_detrange is not None:
+    wv_normt = CropWorkspace(wv_normt,XMin=wv_detrange[0],Xmax=wv_detrange[1])
+wv_scale = Integration(wv_normt)
+scale_factor = len(wv_normt.dataY(0)) / wv_scale.dataY(0)[0]
 WV_normalised_integrals = Scale(WV_normalised_integrals, scale_factor, 'Multiply')
 
 # ===========================output integrals file================================
