@@ -37,7 +37,9 @@ jobs:
         id: cache-files
         uses: actions/cache@v3
         with:
-          path: InstrumentFiles, datafiles
+          path: |
+            InstrumentFiles
+            datafiles
           key: inst_data_cache
 
       - name: Install Mantid
@@ -59,6 +61,6 @@ jobs:
         run: |
           coverage report
 
-      - name: Setup tmate
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
+      #- name: Setup tmate
+      #  if: ${{ failure() }}
+      #  uses: mxschmitt/action-tmate@v3
