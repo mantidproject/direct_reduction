@@ -1,0 +1,12 @@
+name: direct-env
+channels:
+  - conda-forge
+  - mantid
+  - mantid/label/nightly
+dependencies:
+  - coverage
+  - coveralls=3.3.1  # Pinned to a version that works with more recent versions of coverage
+  - ipython
+  - mock
+  - pip
+  - pytest

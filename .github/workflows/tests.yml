@@ -1,0 +1,77 @@
+name: Direct reduction unit tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+  release:
+    types: [published]
+  schedule:
+    - cron: '1 1 * * 1'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Cache mamba
+        uses: actions/cache@v3
+        env:
+          CACHE_NUMBER: 0
+        with:
+          path: ~/conda_pkgs_dir
+          key: mamba-${{ hashFiles('environment.yml') }}
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v2.2.0
+        with:
+          miniforge-version: latest
+          miniforge-variant: Mambaforge
+          activate-environment: direct-env
+          environment-file: environment.yml
+          python-version: 3.8
+          auto-activate-base: false
+          use-only-tar-bz2: true
+
+      - name: Cache data and instrument files
+        id: cache-files
+        uses: actions/cache@v3
+        with:
+          path: |
+            InstrumentFiles
+            datafiles
+          key: inst_data_cache
+
+      - name: Install Mantid
+        run: |
+          mamba install -c mantid/label/nightly mantid
+
+      - name: Clone data instrument files
+        if: ${{ steps.cache-files.outputs.cache-hit != 'true' }}
+        run: |
+          git clone --depth=1 https://github.com/pace-neutrons/InstrumentFiles.git
+          git clone --depth=1 https://github.com/mducle/direct_reduction_test.git
+          mv direct_reduction_test/datafiles ./
+
+      - name: Run Tests and Coverage
+        run: |
+          coverage run -m pytest
+
+      - name: Report Coverage
+        run: |
+          coverage report
+
+      #- name: Setup tmate
+      #  if: ${{ failure() }}
+      #  uses: mxschmitt/action-tmate@v3
