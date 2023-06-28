@@ -48,7 +48,8 @@ jobs:
         if: ${{ steps.cache-files.outputs.cache-hit != 'true' }}
         run: |
           git clone --depth=1 https://github.com/pace-neutrons/InstrumentFiles.git
-          git clone --depth=1 https://github.com/mducle/direct_reduction_test.git datafiles
+          git clone --depth=1 https://github.com/mducle/direct_reduction_test.git
+          mv direct_reduction_test/datafiles ./
 
       - name: Run Tests and Coverage
         run: |
