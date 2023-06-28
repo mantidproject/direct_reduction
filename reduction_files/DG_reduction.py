@@ -49,7 +49,7 @@ powdermap = 'RINGS_MAP_XML'     # rings mapping file - must be .xml format
 file_wait = 30                  # wait for data file to appear (seconds)
 keepworkspaces = True           # should be false for Horace scans
 saveformat = '.nxspe'           # format of output, '.nxspe', '.nxs'
-QENS = True                     # output Q-binned data for QENS data analysis '_red.nxs'
+QENS = False                    # output Q-binned data for QENS data analysis '_red.nxs'
 Qbins = 20                      # approximate number of Q-bins for QENS
 idebug = False                  # keep workspaces and check absolute units on elastic line
 save_dir = f'/instrument/{inst}/RBNumber/USER_RB_FOLDER'  # Set to None to avoid reseting
@@ -82,7 +82,7 @@ def get_raw_file_from_ws(ws):
 def copy_inst_info(outfile, in_ws):
     print(get_raw_file_from_ws(mtd[in_ws]))
     if not os.path.exists(outfile):
-        outfile = mantid.simpleapi.config['defaultsave.directory'] + '/' + os.path.basename(outfile)
+        outfile = os.path.join(mantid.simpleapi.config['defaultsave.directory'], os.path.basename(outfile))
     print(outfile)
     with h5py.File(get_raw_file_from_ws(mtd[in_ws]), 'r') as raw:
         with h5py.File(outfile, 'r+') as spe:
@@ -197,7 +197,10 @@ else:
 # =======================load background runs and sum=========================
 if sample_bg is not None:
     for irun in sample_bg:
-        ws_bg = Load(str(irun),LoadMonitors=False)
+        try:
+            ws_bg = Load(str(irun), LoadMonitors=False)
+        except TypeError:
+            ws_bg = Load(str(irun), LoadMonitors='Exclude')
         if (irun == sample_bg[0]):
             print(f'background run #{irun} loaded')
             w_buf = CloneWorkspace('ws_bg')
@@ -318,7 +321,7 @@ for irun in sample:
         print(f'{inst}: Writing {ofile}{saveformat}')
         if saveformat.lower() == '.nxspe':
             SaveNXSPE('ws_out', ofile+saveformat, Efixed=Ei, KiOverKfScaling=True)
-            copy_inst_info(ofile, 'ws_out')
+            copy_inst_info(ofile+saveformat, 'ws_out')
         elif saveformat.lower() == '.nxs' and not QENS:
             SaveNexus('ws_out', ofile+saveformat)
         if QENS:

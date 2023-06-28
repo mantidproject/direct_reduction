@@ -45,16 +45,26 @@ data_dir = f'/archive/NDX{inst}/Instrument/data/cycle_{cycle_shortform}/'
 config.appendDataSearchDir(data_dir)
 config.appendDataSearchDir(save_dir)
 
+#========================================================
+def try_load_no_mon(irun, ws_name):
+    # LoadISISNexus needs LoadMonitors='Exclude'
+    # LoadEventNexus needs LoadMonitors=False
+    try:
+        return Load(str(irun), LoadMonitors='Exclude', OutputWorkspace=ws_name)
+    except ValueError:
+        return Load(str(irun), LoadMonitors=False, OutputWorkspace=ws_name)
+#========================================================
+
 print(f'\n======= {inst} white van reduction =======')
 
 # =================load white van and background and subtract=====================
 print(f'WHITE_VAN {inst}: Loading white vanadium run# {whitevan}')
-wv = Load(str(whitevan), LoadMonitors='Exclude')
+wv = try_load_no_mon(str(whitevan), 'wv')
 wv = NormaliseByCurrent('wv')
 wv_corrected = Scale('wv', 1/whitevan_trans, 'Multiply')
 if (whitevan_bg is not None):
     print(f'... subtracting white vanadium background run# {whitevan_bg}')
-    wv_bg = Load(str(whitevan_bg), LoadMonitors='Exclude')
+    wv_bg = try_load_no_mon(str(whitevan_bg), 'wv_bg')
     wv_bg = NormaliseByCurrent('wv_bg')
     wv_corrected = wv/whitevan_trans - wv_bg
 
@@ -62,12 +72,12 @@ if (whitevan_bg is not None):
 print('... Calculating white vanadium integrals')
 print(f'... Summing between {wv_lrange[0]:.1f} < \u03BB < {wv_lrange[1]:.1f} \u212B')
 WV_normalised_integrals = ConvertUnits(wv_corrected, 'Wavelength')
-WV_normalised_integrals = Rebin(WV_normalised_integrals, f'{wv_lrange[0]},100,{wv_lrange[1]}')
+WV_normalised_integrals = Rebin(WV_normalised_integrals, f'{wv_lrange[0]},100,{wv_lrange[1]}', PreserveEvents=False)
 if mask_file is not None:
     if mask_dir is not None:
         config.appendDataSearchDir(mask_dir)
-    LoadMask(inst, mask, OutputWorkspace=mask)
-    MaskDetectors(wv_normalised_integrals, MaskedWorkspace=mask)
+    LoadMask(inst, mask_file, OutputWorkspace=mask_file)
+    MaskDetectors(WV_normalised_integrals, MaskedWorkspace=mask_file)
 wv_normt = Transpose(WV_normalised_integrals)
 if wv_detrange is not None:
     wv_normt = CropWorkspace(wv_normt, XMin=wv_detrange[0], Xmax=wv_detrange[1])

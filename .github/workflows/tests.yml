@@ -1,0 +1,50 @@
+name: Direct reduction unit tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v2.2.0
+        with:
+          miniforge-version: latest
+          miniforge-variant: Mambaforge
+          activate-environment: mslice-env
+          environment-file: environment.yml
+          python-version: 3.8
+          auto-activate-base: false
+
+      - name: Install Mantid
+        run: |
+          mamba install -c mantid/label/nightly mantid
+
+      - name: Clone instrument files
+        run: |
+          git clone --depth=1 https://github.com/pace-neutrons/InstrumentFiles.git
+
+      - name: Run Tests and Coverage
+        run: |
+          coverage run -m pytest
+
+      - name: Report Coverage
+        run: |
+          coverage report
