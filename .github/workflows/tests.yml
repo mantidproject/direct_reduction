@@ -57,3 +57,7 @@ jobs:
       - name: Report Coverage
         run: |
           coverage report
+
+      - name: Setup tmate
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
