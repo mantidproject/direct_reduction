@@ -23,15 +23,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Cache mamba
+        uses: actions/cache@v3
+        env:
+          CACHE_NUMBER: 0
+        with:
+          path: ~/conda_pkgs_dir
+          key: mamba-${{ hashFiles('environment.yml') }}
+
       - name: Setup Miniconda
         uses: conda-incubator/setup-miniconda@v2.2.0
         with:
           miniforge-version: latest
           miniforge-variant: Mambaforge
-          activate-environment: mslice-env
+          activate-environment: direct-env
           environment-file: environment.yml
           python-version: 3.8
           auto-activate-base: false
+          use-only-tar-bz2: true
 
       - name: Cache data and instrument files
         id: cache-files
