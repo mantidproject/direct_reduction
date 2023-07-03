@@ -80,11 +80,15 @@ def get_raw_file_from_ws(ws):
     raise RuntimeError('Could not find raw NeXus file in workspace history')
 
 def copy_inst_info(outfile, in_ws):
-    print(get_raw_file_from_ws(mtd[in_ws]))
+    try:
+        raw_file_name = get_raw_file_from_ws(mtd[in_ws])
+    except RuntimeError:
+        return
+    print(raw_file_name)
     if not os.path.exists(outfile):
         outfile = os.path.join(mantid.simpleapi.config['defaultsave.directory'], os.path.basename(outfile))
     print(outfile)
-    with h5py.File(get_raw_file_from_ws(mtd[in_ws]), 'r') as raw:
+    with h5py.File(raw_file_name, 'r') as raw:
         with h5py.File(outfile, 'r+') as spe:
             exclude = ['dae', 'detector_1', 'name']
             to_copy = [k for k in raw['/raw_data_1/instrument'] if not any([x in k for x in exclude])]
@@ -321,9 +325,9 @@ for irun in sample:
         print(f'{inst}: Writing {ofile}{saveformat}')
         if saveformat.lower() == '.nxspe':
             SaveNXSPE('ws_out', ofile+saveformat, Efixed=Ei, KiOverKfScaling=True)
-            copy_inst_info(ofile+saveformat, 'ws_out')
         elif saveformat.lower() == '.nxs':
             SaveNexus('ws_out', ofile+saveformat)
+            copy_inst_info(ofile+saveformat, 'ws_out')
         if QENS:
             print('... outputting QENS "_red" format')
             theta = np.array([theta_range[0], theta_range[1]])*np.pi/180.
