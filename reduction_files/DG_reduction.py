@@ -1,16 +1,16 @@
 # =======================================================
 #
 #      EXCITATIONS INSTRUMENTS REDUCTION SCRIPT
-#      JRS 20/6/23
+#      JRS & MDL 3/7/23
 #
 #      Reads sample run(s), corrects for backgound,
 #      normalises to a white vanadium run, and  the
 #      absolute normalisation factor for each Ei (if MV
-#      file is specified). s
+#      file is specified).
 #      - Masks bad detectors with hard mask only.
 #      - Converts time-of-flight to energy transfer
-#      - performs Q-rebinning for QENS data only
-#      - Outputs .nxspe, .nxs or _red.nxs fiile
+#      - performs Q-rebinning for QENS data ('_red.nxs' format)
+#      - Outputs .nxspe, .nxs or _red.nxs files
 #
 #========================================================
 
@@ -50,6 +50,7 @@ keepworkspaces = True           # should be false for Horace scans
 saveformat = '.nxspe'           # format of output, '.nxspe', '.nxs'
 QENS = False                    # output Q-binned data for QENS data analysis '_red.nxs'
 Qbins = 20                      # approximate number of Q-bins for QENS
+theta_range = [5., 65.]         # useful theta range for Q-binning (QENS)
 idebug = False                  # keep workspaces and check absolute units on elastic line
 save_dir = f'/instrument/{inst}/RBNumber/USER_RB_FOLDER'  # Set to None to avoid reseting
 #========================================================
@@ -147,9 +148,9 @@ print(f'\n======= {inst} data reduction =======')
 print(f'Working directory... {ConfigService.Instance().getString("defaultsave.directory")}\n')
 
 # ============================create lists if necessary==========================
-if type(sample) is not list:
+if isinstance(sample, str) or not hasattr(sample, '__iter__'):
     sample = [sample]
-if type(sample_bg) is not list and sample_bg is not None:
+if sample_bg is not None and (isinstance(sample_bg, str) or not hasattr(sample_bg, '__iter__')):
     sample_bg = [sample_bg]
 
 #==================================load hard mask================================
@@ -162,6 +163,8 @@ else:
     print(f'{inst}: Using previously loaded hard mask - {mask}')
 
 # ===============================load whitevan file==============================
+if wv_file is None:
+    raise RuntimeError(f'{inst}: ERROR - white vanadium calibration file missing')
 if wv_file not in ws_list:
     print(f'{inst}: Loading white vanadium - {wv_file}')
     LoadAscii(Filename=wv_file, OutputWorkspace=wv_file)
@@ -299,10 +302,8 @@ for irun in sample:
         if powder or inst == 'MARI' or QENS:
             ws_out=GroupDetectors(ws_out, MapFile=powdermap, Behaviour='Average')
             ofile_suffix = '_powder'
-            if inst == 'MARI':
+            if inst == 'MARI' or QENS:
                 ofile_suffix = ''
-            if QENS:
-                ofile_suffix = '_red'
             print(f'... powder grouping using {powdermap}')
 
         # output nxspe file
@@ -321,11 +322,11 @@ for irun in sample:
         if saveformat.lower() == '.nxspe':
             SaveNXSPE('ws_out', ofile+saveformat, Efixed=Ei, KiOverKfScaling=True)
             copy_inst_info(ofile+saveformat, 'ws_out')
-        elif saveformat.lower() == '.nxs' and not QENS:
+        elif saveformat.lower() == '.nxs':
             SaveNexus('ws_out', ofile+saveformat)
         if QENS:
             print('... outputting QENS "_red" format')
-            theta = np.array([7.5,65.])*np.pi/180.
+            theta = np.array([theta_range[0], theta_range[1]])*np.pi/180.
             Q     = 1.39 * np.sqrt(Ei) * np.sin(theta)
             Q     = np.around(Q*10) / 10.
             Qbin  = int((Q[1] - Q[0])) / Qbins
@@ -345,7 +346,7 @@ for irun in sample:
                         y[iq] = 0.0
                         e[iq] = 0.0
                         smidge += 1e-6
-            SaveNexus('ws_out', ofile+saveformat)
+            SaveNexus('ws_out', ofile+"_red"+saveformat)
 
         CloneWorkspace('ws_out',OutputWorkspace=ofile+saveformat)
 
@@ -356,7 +357,7 @@ for irun in sample:
 # ============================= End of run loop ================================
 
 # cleanup
-if (not idebug):
+if not idebug:
     ws_list = ADS.getObjectNames()
     nx_list = [ss for ss in ws_list if 'w_buf' in ss or 'ws' in ss]
     for ss in nx_list:
