@@ -1,16 +1,16 @@
 # =======================================================
 #
 #      EXCITATIONS INSTRUMENTS REDUCTION SCRIPT
-#      JRS 20/6/23
+#      JRS 3/7/23
 #
 #      Reads sample run(s), corrects for backgound,
 #      normalises to a white vanadium run, and  the
 #      absolute normalisation factor for each Ei (if MV
-#      file is specified). s
+#      file is specified).
 #      - Masks bad detectors with hard mask only.
 #      - Converts time-of-flight to energy transfer
-#      - performs Q-rebinning for QENS data only
-#      - Outputs .nxspe, .nxs or _red.nxs fiile
+#      - performs Q-rebinning for QENS data ('_red.nxs' format)
+#      - Outputs .nxspe, .nxs or _red.nxs fiies
 #
 #========================================================
 
@@ -23,15 +23,15 @@ import time
 from importlib import reload
 
 #=======================User Inputs=======================
-powder         = True                        #powder or 1to1 map
-sumruns        = False                       #set to True to sum sample runs
-sample         = [93338]                     #sample runs (list)
-sample_bg      = 93329                       #single background run
-wv_file        = 'WV_91329.txt'              #white vanadium integral file (mandatory)
-Ei_list        = [3.71,1.035,1.775]          #incident energies (Ei) - from PyChop
-Erange         = [-0.8,0.0025,0.8]           #energy transfer range to output in fractions of Ei
-trans          = [0.95,0.95,0.95]            #elastic line transmission factors for each Ei
-mask           = "LET_mask_231.xml"          #hard mask
+powder         = False                    #powder or 1to1 map
+sumruns        = False                    #set to True to sum sample runs
+sample         = 93368                    #sample runs
+sample_bg      = None                     #background runs
+wv_file        = 'WV_91329.txt'           #white vanadium integral file (mandatory)
+Ei_list        = [22.78,7.52,3.7,2.2]     #incident energies (Ei)
+Erange         = [-0.8,0.0025,0.8]        #energy transfer range to output in fractions of Ei
+trans          = [1,1,1,1]                #elastic line transmission factors for each Ei
+mask           = "LET_mask_231.xml"       #hard mask
 #========================================================
 
 #==================Absolute Units Inputs=================
@@ -48,7 +48,7 @@ sample_fwt    = 50.9415     # formula weight of sample
 # LET monitors:     m2spec=98310, m3spec= None - fixei = True
 
 config['default.instrument'] = 'LET'
-cycle   = '23_1'                #cycle number
+cycle   = '23_2'                #cycle number
 m2spec  = 98310                 #specID of monitor2 (pre-sample)
 m3spec  = None                  #specID of monitor3 (post-sample)
 fixei   = True                  #True for LET since no monitor 3
@@ -56,8 +56,9 @@ powdermap = 'LET_rings_222.xml' #rings mapping file - must be .xml format
 file_wait = 30                  #wait for data file to appear (seconds)
 keepworkspaces = True           #should be false for Horace scans
 saveformat = '.nxspe'           #format of output, ".nxspe", ".nxs"
-QENS = True                     #output Q-binned data for QENS data analysis "_red.nxs"
-Qbins = 20                      #approximate number of Q-bins for QENS
+QENS = False                    #output Q-binned data for QENS data analysis "_red.nxs"
+Qbins = 20                      #approximate number of Q-bins (QENS)
+theta_range = [5.,65.]          #useful theta range for Q-binning (QENS)
 
 idebug  = False                 #keep workspaces and check absolute units on elastic line
 #========================================================
@@ -80,7 +81,7 @@ if inst == 'MARI':
     source = 'Moderator'
 else:
     source = 'undulator'
-    
+
 datadir = '/archive/NDX'+inst+'/instrument/data/cycle_'+cycle+'/'
 mapdir  = '/usr/local/mprogs/InstrumentFiles/'+inst.swapcase()+'/'
 config.appendDataSearchDir(mapdir)
@@ -91,9 +92,9 @@ print("\n======= "+inst+" data reduction =======")
 print('Working directory... %s\n' % ConfigService.Instance().getString('defaultsave.directory'))
 
 # ============================create lists if necessary==========================
-if type(sample) is not list:
+if type(sample) is int:
     sample = [sample]
-if type(sample_bg) is not list:
+if sample_bg is not None and type(sample_bg) is int:
     sample_bg = [sample_bg]
 
 #==================================load hard mask================================
@@ -104,8 +105,11 @@ if mask not in ws_list and mask is not None:
     LoadMask(inst,mask,OutputWorkspace=mask)
 else:
     print(inst+": Using previously loaded hard mask - %s" % mask)
-    
+
 # ===============================load whitevan file==============================
+if wv_file is None:
+    print(inst+": ERROR - white vanadium calibration file missing")
+    exit(1)
 if wv_file not in ws_list:
     print(inst+": Loading white vanadium - %s" % wv_file)
     LoadAscii(Filename=wv_file,OutputWorkspace=wv_file)
@@ -149,7 +153,7 @@ if sample_bg is not None:
             w_buf = Plus('w_buf', 'ws_bg')
     ws_bg = CloneWorkspace('w_buf')
     ws_bg = NormaliseByCurrent('ws_bg')
-        
+
 # =======================sum sample runs if required=========================
 if sumruns:
     for irun in sample:
@@ -173,18 +177,18 @@ for irun in sample:
         nx_list = [ss for ss in ws_list if saveformat in ss]
         for ss in nx_list:
             ADS.remove(ss)
-        
+
     print("============")
-    if not sumruns:  
+    if not sumruns:
         tryload(irun)
         print("Loading run# %i" % irun)
     if inst == 'MARI':
         ws = RemoveSpectra('ws',[0])
     ws = NormaliseByCurrent('ws')
 
-# ============================= Ei loop =====================================  
+# ============================= Ei loop =====================================
     for ienergy in range(len(Ei_list)):
-        Ei  = Ei_list[ienergy]
+       Ei  = Ei_list[ienergy]
         origEi = Ei
         tr  = trans[ienergy]
         mvf = mv_fac[ienergy]
@@ -199,18 +203,18 @@ for irun in sample:
         print("... normalising/masking data")
         ws_norm = Divide('ws_corrected',wv_file)          # white beam normalisation
         MaskDetectors(ws_norm,MaskedWorkspace=mask,ForceInstrumentMasking=True)
-        
+
 # t2e section
         print("... t2e section")
         ws_monitors = mtd['ws_monitors']
         spectra = ws_monitors.getSpectrumNumbers()
         index = spectra.index(m2spec)
         m2pos = ws.detectorInfo().position(index)[2]
-        
-# this section shifts the time-of-flight such that the monitor2 peak 
+
+# this section shifts the time-of-flight such that the monitor2 peak
 # in the current monitor workspace (post monochromator) is at t=0 and L=0
-# note that the offest is not the predicted value due to energy dependence of the source position        
-       
+# note that the offest is not the predicted value due to energy dependence of the source position
+
         if m3spec is not None and not fixei:
             (Ei,mon2_peak,_,_) = GetEi(ws_monitors,Monitor1Spec=m2spec,Monitor2Spec=m3spec,EnergyEstimate=Ei)
             print("... refined Ei=%.2f meV" % Ei)
@@ -218,7 +222,7 @@ for irun in sample:
             (Ei,mon2_peak,_,_) = GetEi(ws_monitors,Monitor2Spec=m2spec,EnergyEstimate=Ei,FixEi=fixei)
 
         print("... m2 tof=%.2f mus, m2 pos=%.2f m" % (mon2_peak,m2pos))
-            
+
         ws_norm = ScaleX(ws_norm, Factor=-mon2_peak, Operation='Add', InstrumentParameter='DelayTime', Combine=True)
         MoveInstrumentComponent(ws_norm, ComponentName=source, Z=m2pos, RelativePosition=False)
 
@@ -230,22 +234,20 @@ for irun in sample:
 # monovan scaling
         if mv_file is not None:
             print("... applying mono van calibration factor %.1f " % mvf)
-        ws_out = Scale('ws_out',mvf,'Multiply') 
+        ws_out = Scale('ws_out',mvf,'Multiply')
 
 # rings grouping if desired
         ofile_suffix='_1to1'
         if powder or inst == 'MARI' or QENS:
             ws_out=GroupDetectors(ws_out, MapFile=powdermap, Behaviour='Average')
             ofile_suffix = '_powder'
-            if inst == 'MARI':
+            if inst == 'MARI' or QENS:
                 ofile_suffix = ''
-            if QENS:
-                ofile_suffix = '_red'
             print("... powder grouping using %s" % powdermap)
 
 # output nxspe file
         ofile = '{:s}{:d}_{:g}meV{:s}'.format(inst[:3],irun,origEi,ofile_suffix)
-        
+
 # check elastic line (debug mode)
         if idebug:
             Rebin('ws_out',[-0.05*Ei,100,0.05*Ei], PreserveEvents=False, OutputWorkspace=ofile+'_elastic')
@@ -258,17 +260,17 @@ for irun in sample:
         print(inst+": Writing %s" % ofile+saveformat)
         if saveformat.lower() == '.nxspe':
             SaveNXSPE('ws_out',ofile+saveformat,Efixed=Ei,KiOverKfScaling=True)
-        elif saveformat.lower() == '.nxs' and not QENS:
+        elif saveformat.lower() == '.nxs':
             SaveNexus('ws_out', ofile+saveformat)
         if QENS:
             print("... outputting QENS '_red' format")
-            theta = np.array([7.5,65.])*np.pi/180.
+            theta = np.array([theta_range[0],theta_range[1]])*np.pi/180.
             Q     = 1.39 * np.sqrt(Ei) * np.sin(theta)
             Q     = np.around(Q*10) / 10.
             Qbin  = int((Q[1] - Q[0])) / Qbins
             print("... Q-axis = [%g,%g,%g]" % (Q[0]+Qbin,Qbin,Q[1]-Qbin))
             ws_out = SofQW3('ws_out', [Q[0]+Qbin,Qbin,Q[1]-Qbin], "Direct", Efixed=Ei)
-# these lines are Anthony Lim's method of removing NaNs 
+# these lines are Anthony Lim's method of removing NaNs
 # NaN are changed to zeros, and then placed at the end of the energy range
             spectra = range(ws_out.getNumberHistograms())
             for ispec in spectra:
@@ -281,26 +283,20 @@ for irun in sample:
                         x[iq]=np.max(x) + smidge
                         y[iq]=0.0
                         e[iq]=0.0
-                        smidge += 1e-6    
-            SaveNexus('ws_out', ofile+saveformat)
-         
+                        smidge += 1e-6
+            SaveNexus('ws_out', ofile+"_red"+saveformat)
+
         CloneWorkspace('ws_out',OutputWorkspace=ofile+saveformat)
 
 # ============================= End of Ei loop ================================
 
     print("\n"+inst+": Reduction complete in %.1f seconds\n" % (time.time() - t))
-    
+
 # ============================= End of run loop ================================
 
 # cleanup
-if (not idebug):
+if not idebug:
     ws_list = ADS.getObjectNames()
     nx_list = [ss for ss in ws_list if 'w_buf' in ss or 'ws' in ss]
     for ss in nx_list:
         ADS.remove(ss)
-
-       
-
-
-
-
