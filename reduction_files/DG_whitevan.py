@@ -23,7 +23,6 @@ t = time.time()         #start the clock
 whitevan       = 78715                  # white vanadium run
 whitevan_bg    = None                   # background for the white vanadium
 whitevan_trans = 1                      # transmission factor
-mask_file      = 'MASK_FILE_XML'        # hardmask file (str or None)
 #========================================================
 
 #==================Local Contact Inputs==================
@@ -32,7 +31,6 @@ cycle = 'CYCLE_ID'                      # cycle
 wv_lrange = [1,5]                       # wavelength integration limits for output of vanadium integrals
 wv_detrange = [30000,60000]             # spectrum index range for average intensity calculation
 idebug = False                          # keep itermediate workspaces for debugging
-mask_dir = None                         # folder for mask file (str or None)
 save_dir = f'/instrument/{inst}/RBNumber/USER_RB_FOLDER' # Set to None to avoid resetting
 #========================================================
 
@@ -72,11 +70,6 @@ print('... Calculating white vanadium integrals')
 print(f'... Summing between {wv_lrange[0]:.1f} < \u03BB < {wv_lrange[1]:.1f} \u212B')
 WV_normalised_integrals = ConvertUnits(wv_corrected, 'Wavelength')
 WV_normalised_integrals = Rebin(WV_normalised_integrals, f'{wv_lrange[0]},100,{wv_lrange[1]}', PreserveEvents=False)
-if mask_file is not None:
-    if mask_dir is not None:
-        config.appendDataSearchDir(mask_dir)
-    LoadMask(inst, mask_file, OutputWorkspace=mask_file)
-    MaskDetectors(WV_normalised_integrals, MaskedWorkspace=mask_file)
 wv_normt = Transpose(WV_normalised_integrals)
 if wv_detrange is not None:
     wv_normt = CropWorkspace(wv_normt, XMin=wv_detrange[0], Xmax=wv_detrange[1])
