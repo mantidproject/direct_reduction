@@ -16,6 +16,7 @@ class DGReductionTest(unittest.TestCase):
         cls.instpath = os.path.join(cls.repopath, 'InstrumentFiles')
         cls.outputpath = os.path.join(cls.repopath, 'tests')
         sys.path.append(cls.outputpath)
+        sys.path.append(cls.scriptpath)
         s_api.config['defaultsave.directory'] = cls.outputpath
         s_api.config.appendDataSearchDir(cls.datapath)
         for inst in ['let', 'maps', 'mari', 'merlin']:
@@ -63,6 +64,8 @@ class DGReductionTest(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28581_180meV.nxspe')))
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28581_29.8meV.nxspe')))
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28581_11.7meV.nxspe')))
+        #Load automatically calls `LoadNeXus` first which chokes on the file...
+        #ws = s_api.Load(os.path.join(self.outputpath, 'MAR28581_180meV.nxspe'))
 
 
     def test_LET_QENS(self):
@@ -91,6 +94,7 @@ class DGReductionTest(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET93338_3.7meV_red.nxs')))
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET93338_1.77meV_red.nxs')))
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET93338_1.03meV_red.nxs')))
+        ws = s_api.Load(os.path.join(self.outputpath, 'LET93338_3.7meV_red.nxs'))
 
 
     def test_MERLIN(self):
@@ -117,6 +121,7 @@ class DGReductionTest(unittest.TestCase):
         self.substitute_file(infile, outfile, subsdict)
         import merlin_reduction
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MER59151_150meV_powder.nxspe')))
+        ws = s_api.Load(os.path.join(self.outputpath, 'MER59151_150meV_powder.nxspe'))
 
 
     def test_MAPS(self):
@@ -144,6 +149,7 @@ class DGReductionTest(unittest.TestCase):
         self.substitute_file(infile, outfile, subsdict)
         import maps_reduction
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAP41335_80meV_1to1.nxspe')))
+        ws = s_api.Load(os.path.join(self.outputpath, 'MAP41335_80meV_1to1.nxspe'))
 
 
 if __name__ == '__main__':
