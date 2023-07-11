@@ -7,6 +7,8 @@ let_whitevan.py
 let_reduction.py
 mari_whitevan.py
 mari_reduction.py
+mari_reduction_lowE.py
+mari_reduction_existing.py
 maps_whitevan.py
 maps_reduction.py
 merlin_whitevan.py
@@ -16,3 +18,4 @@ MAR*nxs*
 MAP*nxs*
 MER*nxs*
 WV*txt
+InstrumentFiles

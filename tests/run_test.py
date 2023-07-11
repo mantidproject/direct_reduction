@@ -67,6 +67,45 @@ class DGReductionTest(unittest.TestCase):
         #Load automatically calls `LoadNeXus` first which chokes on the file...
         #ws = s_api.Load(os.path.join(self.outputpath, 'MAR28581_180meV.nxspe'))
 
+    def test_MARI_multiple_lowE(self):
+        subsdict = {'\nconfig':'\n#config',
+                    'save_dir = ':'save_dir = None #',
+                    'INSTRUMENT_NAME':'MARI',
+                    'MASK_FILE_XML':'mari_mask2023_1.xml',
+                    'RINGS_MAP_XML':'mari_res2013.map',
+                    'whitevan\s*=\s*[0-9]*':'whitevan = 28580',
+                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = [28727, 28728]',
+                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
+                    'wv_detrange\s*=\s*[\\[\\]0-9,]*':'wv_detrange = None',
+                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]*':'Ei_list = [1.84, 1.1]'}
+        infile = os.path.join(self.scriptpath, 'DG_reduction.py')
+        outfile = os.path.join(self.outputpath, 'mari_reduction_lowE.py')
+        self.substitute_file(infile, outfile, subsdict)
+        import mari_reduction_lowE
+        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28727_1.84meV.nxspe')))
+        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28727_1.1meV.nxspe')))
+
+    def test_existing_workspace(self):
+        subsdict = {'\nconfig':'\n#config',
+                    'save_dir = ':'save_dir = None #',
+                    'INSTRUMENT_NAME':'MARI',
+                    'MASK_FILE_XML':'mari_mask2023_1.xml',
+                    'RINGS_MAP_XML':'mari_res2013.map',
+                    'whitevan\s*=\s*[0-9]*':'whitevan = 28580',
+                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = ["ws_existing"]',
+                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
+                    'wv_detrange\s*=\s*[\\[\\]0-9,]*':'wv_detrange = None',
+                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]*':'Ei_list = [1.84, 1.1]'}
+        ws_existing = s_api.Load('MAR28728.raw', LoadMonitors='Exclude')
+        ws_existing = s_api.RemoveSpectra(ws_existing, [0])
+        infile = os.path.join(self.scriptpath, 'DG_reduction.py')
+        outfile = os.path.join(self.outputpath, 'mari_reduction_existing.py')
+        self.substitute_file(infile, outfile, subsdict)
+        import mari_reduction_existing
+        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28728_1.84meV.nxspe')))
+        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28728_1.1meV.nxspe')))
 
     def test_LET_QENS(self):
         # Checks that the reduction script runs for LET QENS and generates output files

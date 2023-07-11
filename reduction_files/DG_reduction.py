@@ -55,20 +55,6 @@ idebug = False                  # keep workspaces and check absolute units on el
 save_dir = f'/instrument/{inst}/RBNumber/USER_RB_FOLDER'  # Set to None to avoid reseting
 #========================================================
 
-#========================================================
-def tryload(irun):              # loops till data file appears
-    while True:
-        try:
-            ws = Load(str(irun),LoadMonitors=True)
-        except TypeError:
-            ws = Load(str(irun),LoadMonitors='Separate')
-        except ValueError:
-            print(f'...waiting for run #{irun}')
-            time.sleep(file_wait)
-            continue
-        break
-#========================================================
-
 # ==============================setup directroties================================
 config['default.instrument'] = inst
 if save_dir is not None:
@@ -111,6 +97,41 @@ try:
     utils_loaded = True
 except ImportError:
     utils_loaded = False
+    def rename_existing_ws(*a, **k): raise RuntimeError('Unable to load utils')
+    def remove_extra_spectra_if_mari(*a, **k): raise RuntimeError('Unable to load utils')
+
+#========================================================
+# Helper functions
+def tryload(irun):              # loops till data file appears
+    if isinstance(irun, str) and irun in mtd:
+        # If users give a string which matches an existing workspace, use that instead
+        return rename_existing_ws(irun)
+    while True:
+        try:
+            ws = Load(str(irun),LoadMonitors=True)
+        except TypeError:
+            ws = Load(str(irun),LoadMonitors='Separate')
+        except ValueError:
+            print(f'...waiting for run #{irun}')
+            time.sleep(file_wait)
+            continue
+        break
+    if inst == 'MARI':
+        remove_extra_spectra_if_mari('ws')
+
+def load_sum(run_list):
+    for ii, irun in enumerate(run_list):
+        tryload(irun)
+        if ii == 0:
+            w_buf = CloneWorkspace('ws')
+            w_buf_monitors = CloneWorkspace('ws_monitors')
+            print(f'run #{irun} loaded')
+        else:
+            w_buf = Plus('w_buf', 'ws')
+            w_buf_monitors = Plus('w_buf_monitors', 'ws_monitors')
+            print(f'run #{irun} added')
+#========================================================
+
 
 print(f'\n======= {inst} data reduction =======')
 print(f'Working directory... {ConfigService.Instance().getString("defaultsave.directory")}\n')
@@ -166,32 +187,13 @@ else:
 
 # =======================load background runs and sum=========================
 if sample_bg is not None:
-    for irun in sample_bg:
-        try:
-            ws_bg = Load(str(irun), LoadMonitors=False)
-        except TypeError:
-            ws_bg = Load(str(irun), LoadMonitors='Exclude')
-        if (irun == sample_bg[0]):
-            print(f'background run #{irun} loaded')
-            w_buf = CloneWorkspace('ws_bg')
-        else:
-            print(f'background run #{irun} added')
-            w_buf = Plus('w_buf', 'ws_bg')
+    load_sum(sample_bg)
     ws_bg = CloneWorkspace('w_buf')
     ws_bg = NormaliseByCurrent('ws_bg')
 
 # =======================sum sample runs if required=========================
 if sumruns:
-    for irun in sample:
-        tryload(irun)
-        if (irun == sample[0]):
-            print(f'run #{irun} loaded')
-            w_buf = CloneWorkspace('ws')
-            w_buf_monitors = CloneWorkspace('ws_monitors')
-        else:
-            print(f'run #{irun} added')
-            w_buf = Plus('w_buf', 'ws')
-            w_buf_monitors = Plus('w_buf_monitors', 'ws_monitors')
+    load_sum(sample)
     ws = CloneWorkspace('w_buf')
     ws_monitors = CloneWorkspace('w_buf_monitors')
     sample = [sample[0]]
@@ -211,8 +213,6 @@ for irun in sample:
     if not sumruns:
         tryload(irun)
         print(f'Loading run# {irun}')
-    if inst == 'MARI' and mtd['ws'].getNumberHistograms() > 918:
-        ws = RemoveSpectra('ws',[0])
     ws = NormaliseByCurrent('ws')
 
 # ============================= Ei loop =====================================
@@ -239,6 +239,10 @@ for irun in sample:
         spectra = ws_monitors.getSpectrumNumbers()
         index = spectra.index(m2spec)
         m2pos = ws.detectorInfo().position(index)[2]
+
+        if inst == 'MARI' and utils_loaded and origEi < 4.01:
+            # Shifts data / monitors into second frame for MARI
+            ws_norm, ws_monitors = shift_frame_for_mari_lowE(origEi, wsname='ws_norm', wsmon='ws_monitors')
 
         # this section shifts the time-of-flight such that the monitor2 peak
         # in the current monitor workspace (post monochromator) is at t=0 and L=0
@@ -273,6 +277,8 @@ for irun in sample:
             if inst == 'MARI' or QENS:
                 ofile_suffix = ''
             print(f'... powder grouping using {powdermap}')
+        if sample_bg is not None and inst == 'MARI':
+            ofile_suffix += '_sub'
 
         # output nxspe file
         ofile = f'{inst[:3]}{irun}_{origEi:g}meV{ofile_suffix}'
