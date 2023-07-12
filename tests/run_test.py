@@ -67,6 +67,7 @@ class DGReductionTest(unittest.TestCase):
         #Load automatically calls `LoadNeXus` first which chokes on the file...
         #ws = s_api.Load(os.path.join(self.outputpath, 'MAR28581_180meV.nxspe'))
 
+
     def test_MARI_multiple_lowE(self):
         subsdict = {'\nconfig':'\n#config',
                     'save_dir = ':'save_dir = None #',
@@ -85,6 +86,7 @@ class DGReductionTest(unittest.TestCase):
         import mari_reduction_lowE
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28727_1.84meV.nxspe')))
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28727_1.1meV.nxspe')))
+
 
     def test_existing_workspace(self):
         subsdict = {'\nconfig':'\n#config',
@@ -134,6 +136,27 @@ class DGReductionTest(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET93338_1.77meV_red.nxs')))
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET93338_1.03meV_red.nxs')))
         ws = s_api.Load(os.path.join(self.outputpath, 'LET93338_3.7meV_red.nxs'))
+
+
+    def test_LET_same_angle(self):
+        subsdict = {'\nconfig':'\n#config',
+                    'save_dir = ':'save_dir = None #',
+                    'INSTRUMENT_NAME':'LET',
+                    'MASK_FILE_XML':'LET_mask_222.xml',
+                    'RINGS_MAP_XML':'LET_rings_222.xml',
+                    'whitevan\s*=\s*[0-9]*':'whitevan = 91329',
+                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = [92089, 92168]',
+                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_91329.txt\'',
+                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]*':'Ei_list = [3.7]',
+                    'powder\s*=\s*True': 'powder = False'}
+        s_api.config['default.instrument'] = 'LET'
+        infile = os.path.join(self.scriptpath, 'DG_reduction.py')
+        outfile = os.path.join(self.outputpath, 'let_reduction_angle.py')
+        self.substitute_file(infile, outfile, subsdict)
+        import let_reduction_angle
+        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET92089_3.7meV_1to1.nxspe')))
+        self.assertFalse(os.path.exists(os.path.join(self.outputpath, 'LET92168_3.7meV_1to1.nxspe')))
 
 
     def test_MERLIN(self):

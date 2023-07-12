@@ -2,6 +2,7 @@ from mantid.simpleapi import *
 from mantid.api import AnalysisDataService as ADS
 import numpy as np
 import re, os, h5py
+import json
 
 #========================================================
 # General utility functions
@@ -23,6 +24,7 @@ def rename_existing_ws(ws_name):
             _get_mon_from_history(ws_name)
     else:
         CloneWorkspace(mon_ws, OutputWorkspace='ws_monitors')
+    return ws
 
 def _get_mon_from_history(ws_name):
     # Tries to look in the history of a workspace for its original raw file
@@ -43,6 +45,45 @@ def _get_mon_from_history(ws_name):
     DeleteWorkspace('tmp_mons')
     mtd[ws_name].setMonitorWorkspace(mtd[ws_mon_name])
     CloneWorkspace(ws_mon_name, OutputWorkspace='ws_monitors')
+
+def get_angle(irun, angle_workspace='angle_ws', psi_motor_name='rot', tryload=None):
+    # Checks if a workspace with previous angles exists and if we've seen this run before
+    if angle_workspace not in mtd:
+        CreateWorkspace(OutputWorkspace=angle_workspace, DataX=0, DataY=0)
+    prev_angles = {}
+    if mtd[angle_workspace].getRun().hasProperty('angles_seen'):
+        prev_angles = json.loads(mtd[angle_workspace].getRun().getProperty('angles_seen').value)
+    if irun in sum(prev_angles.values(), []):
+        angle = float([k for k, v in prev_angles.items() if irun in v][0])
+    else:
+        if tryload is not None:
+            ws = tryload(irun)
+        else:
+            try:
+                ws = Load(orig_file, SpectrumMax=10, LoadMonitors=True, StoreInADS=False)
+            except TypeError:
+                ws = Load(orig_file, SpectrumMax=10, LoadMonitors='Separate', StoreInADS=False)
+        angle = ws.getRun().getLogData(psi_motor_name).value[-1]
+        # Reduce to 0.2 degree accuracy to check for equivalent angles
+        angle = np.round(angle * 5.) / 5.
+        print(f'Read logs from run {irun}, at rotation {angle} degrees')
+    angles = str(angle)
+    if angles not in prev_angles.keys():
+        prev_angles[angles] = []
+    if irun not in prev_angles[angles]:
+        prev_angles[angles].append(irun)
+    # Save previous angle information to workspace
+    loginfo = json.dumps(prev_angles)
+    mtd[angle_workspace].getRun().addProperty('angles_seen', loginfo, '', True)
+    return prev_angles[angles]
+
+def build_angles_ws(run_list, angle_workspace, psi_motor_name):
+    for irun in run_list:
+        # Just run through the list to build up list of angles in the angles_workspace
+        try:
+            get_angle(irun, angle_workspace=angle_workspace, psi_motor_name=psi_motor_name)
+        except:
+            pass
 
 #========================================================
 # Functions to copy instrument info needed by HORACE

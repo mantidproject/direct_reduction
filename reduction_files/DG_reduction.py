@@ -32,6 +32,11 @@ Ei_list        = [3.71,1.035,1.775]          # incident energies (Ei) - from PyC
 Erange         = [-0.8,0.0025,0.8]           # energy transfer range to output in fractions of Ei
 trans          = [0.95,0.95,0.95]            # elastic line transmission factors for each Ei
 mask           = 'MASK_FILE_XML'             # hard mask
+# what to do if see run with same angle as previous run (and sumruns==False)
+#  - 'replace': sum and replace first nxspe file created
+#  - 'ignore': ignore and create an nxspe for each run
+#  - 'accumulate': sum all runs with this angle when creating new nxspe
+same_angle_action = 'replace'
 #========================================================
 
 #==================Absolute Units Inputs=================
@@ -53,6 +58,8 @@ Qbins = 20                      # approximate number of Q-bins for QENS
 theta_range = [5., 65.]         # useful theta range for Q-binning (QENS)
 idebug = False                  # keep workspaces and check absolute units on elastic line
 save_dir = f'/instrument/{inst}/RBNumber/USER_RB_FOLDER'  # Set to None to avoid reseting
+psi_motor_name = 'rot'          # name of the rotation motor in the logs
+angles_workspace = 'angles_ws'  # name of workspace to store previously seen angles
 #========================================================
 
 # ==============================setup directroties================================
@@ -64,6 +71,7 @@ if inst == 'MARI':
     m2spec = 2                  # specID of monitor2 (pre-sample)
     m3spec = 3                  # specID of monitor3 (post-sample)
     monovan_mass = 32.58        # mass of vanadium cylinder
+    same_angle_action = 'ignore'
 elif inst == 'MERLIN':
     source = 'undulator'
     m2spec = 69636              # specID of monitor2 (pre-sample)
@@ -118,6 +126,7 @@ def tryload(irun):              # loops till data file appears
         break
     if inst == 'MARI':
         remove_extra_spectra_if_mari('ws')
+    return mtd['ws']
 
 def load_sum(run_list):
     for ii, irun in enumerate(run_list):
@@ -198,6 +207,13 @@ if sumruns:
     ws_monitors = CloneWorkspace('w_buf_monitors')
     sample = [sample[0]]
 
+# =====================angles cache stuff====================================
+if utils_loaded:
+    build_angles_ws(sample, angles_workspace, psi_motor_name)
+    runs_with_angles_already_seen = []
+else:
+    same_angle_action = 'ignore'
+
 # =======================sample run loop=====================================
 for irun in sample:
     t = time.time()         # start the clock
@@ -209,10 +225,23 @@ for irun in sample:
         for ss in nx_list:
             ADS.remove(ss)
 
+    # if this run is at an angle already seen and we are doing 'replace', skip
+    if same_angle_action.lower() != 'ignore' and irun in runs_with_angles_already_seen:
+        continue
+
     print('============')
     if not sumruns:
-        tryload(irun)
-        print(f'Loading run# {irun}')
+        # Checks rotation angle
+        if same_angle_action.lower() != 'ignore':
+            runs_with_same_angles = get_angle(irun, angles_workspace, psi_motor_name, tryload)
+            if len(runs_with_same_angles) > 1:
+                load_sum(runs_with_same_angles)
+                if same_angle_action.lower() == 'replace':
+                    irun = runs_with_same_angles[0]
+                    runs_with_angles_already_seen += runs_with_same_angles
+        else:
+            tryload(irun)
+            print(f'Loading run# {irun}')
     ws = NormaliseByCurrent('ws')
 
 # ============================= Ei loop =====================================
