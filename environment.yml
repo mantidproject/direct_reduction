@@ -9,4 +9,3 @@ dependencies:
   - ipython
   - mock
   - pip
-  - pytest

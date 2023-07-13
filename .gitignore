@@ -5,6 +5,7 @@ __pycache__
 
 let_whitevan.py
 let_reduction.py
+let_reduction_angle.py
 mari_whitevan.py
 mari_reduction.py
 mari_reduction_lowE.py
