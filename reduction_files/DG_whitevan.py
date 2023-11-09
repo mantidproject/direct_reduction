@@ -78,7 +78,8 @@ scale_factor = len(wv_normt.dataY(0)) / wv_scale.dataY(0)[0]
 WV_normalised_integrals = Scale(WV_normalised_integrals, scale_factor, 'Multiply')
 
 # ===========================output integrals file================================
-ofile = f'WV_{whitevan}.txt'
+wv_name = whitevan if (isinstance(whitevan, (str, int, float)) or len(whitevan)==1) else whitevan[0]
+ofile = f'WV_{wv_name}.txt'
 print(f'WHITE_VAN {inst}: Saving integrals in {ofile}')
 print(f'... average intensity = {1/scale_factor:.2f}')
 SaveAscii(WV_normalised_integrals, ofile)

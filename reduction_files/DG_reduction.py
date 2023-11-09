@@ -201,6 +201,7 @@ if sample_bg is not None:
     ws_bg = NormaliseByCurrent('ws_bg')
 
 # =======================sum sample runs if required=========================
+sumsuf = sumruns and len(sample) > 1
 if sumruns:
     load_sum(sample)
     ws = CloneWorkspace('w_buf')
@@ -267,7 +268,7 @@ for irun in sample:
         ws_monitors = mtd['ws_monitors']
         spectra = ws_monitors.getSpectrumNumbers()
         index = spectra.index(m2spec)
-        m2pos = ws.detectorInfo().position(index)[2]
+        m2pos = mtd['ws'].detectorInfo().position(index)[2]
 
         if inst == 'MARI' and utils_loaded and origEi < 4.01:
             # Shifts data / monitors into second frame for MARI
@@ -289,7 +290,7 @@ for irun in sample:
         MoveInstrumentComponent(ws_norm, ComponentName=source, Z=m2pos, RelativePosition=False)
 
         ws_out = ConvertUnits(ws_norm, 'DeltaE', EMode='Direct', EFixed=Ei)
-        ws_out = Rebin(ws_out, [x*Ei for x in Erange], PreserveEvents=False)
+        ws_out = Rebin(ws_out, [x*origEi for x in Erange], PreserveEvents=False)
         ws_out = DetectorEfficiencyCor(ws_out, IncidentEnergy=Ei)
         ws_out = CorrectKiKf(ws_out, Efixed=Ei, EMode='Direct')
 
@@ -306,8 +307,11 @@ for irun in sample:
             if inst == 'MARI' or QENS:
                 ofile_suffix = ''
             print(f'... powder grouping using {powdermap}')
-        if sample_bg is not None and inst == 'MARI':
-            ofile_suffix += '_sub'
+        if inst == 'MARI':
+            if sumsuf:
+                ofile_suffix += 'sum'
+            if sample_bg is not None:
+                ofile_suffix += '_sub'
 
         # output nxspe file
         ofile = f'{inst[:3]}{irun}_{origEi:g}meV{ofile_suffix}'
@@ -327,7 +331,9 @@ for irun in sample:
             if utils_loaded:
                 copy_inst_info(ofile+saveformat, 'ws_out')   # Copies instrument info for Horace
         elif saveformat.lower() == '.nxs':
-            SaveNexus('ws_out', ofile+saveformat)
+            rmlogs = {'events_log', 'frame_log', 'good_frame_log', 'period_log', 'proton_charge', 'raw_events_log'}
+            RemoveLogs('ws_out', KeepLogs=','.join(set(mtd['ws_out'].run().keys()).difference(rmlogs)))
+            SaveNexusProcessed('ws_out', ofile+saveformat, PreserveEvents=False, CompressNexus=True)
         if QENS:
             print('... outputting QENS "_red" format')
             theta = np.array([theta_range[0], theta_range[1]])*np.pi/180.
