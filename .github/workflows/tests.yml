@@ -25,13 +25,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Cache mamba
-        uses: actions/cache@v3
-        env:
-          CACHE_NUMBER: 0
-        with:
-          path: ~/conda_pkgs_dir
-          key: mamba-${{ hashFiles('environment.yml') }}
+      #- name: Cache mamba
+      #  uses: actions/cache@v3
+      #  env:
+      #    CACHE_NUMBER: 0
+      #  with:
+      #    path: ~/conda_pkgs_dir
+      #    key: mamba-${{ hashFiles('environment.yml') }}
 
       - name: Setup Miniconda
         uses: conda-incubator/setup-miniconda@v2.2.0
@@ -51,7 +51,7 @@ jobs:
           path: |
             InstrumentFiles
             datafiles
-          key: inst_data_cache
+          key: cached-data-${{ hashFiles('**/cached_git_hashes') }}
 
       - name: Install Mantid
         run: |
@@ -60,16 +60,25 @@ jobs:
       - name: Clone data instrument files
         if: ${{ steps.cache-files.outputs.cache-hit != 'true' }}
         run: |
-          git clone --depth=1 https://github.com/pace-neutrons/InstrumentFiles.git
-          git clone --depth=1 https://github.com/mducle/direct_reduction_test.git
-          mv direct_reduction_test/datafiles ./
+          git clone https://github.com/pace-neutrons/InstrumentFiles.git
+          git clone https://github.com/mducle/direct_reduction_test.git
+          cp -rpa direct_reduction_test/datafiles ./
+
+      - name: Update data instrument files
+        run: |
+          cwd=$(pwd)
+          cd $cwd/InstrumentFiles && git pull && git rev-parse --short HEAD > ../datafiles/cached_git_hashes
+          cd $cwd/direct_reduction_test && git pull && git rev-parse --short HEAD >> cached_git_hashes
+          cd $cwd && rsync -av direct_reduction_test/datafiles/ datafiles/
 
       - name: Run Tests and Coverage
         run: |
-          coverage run -m pytest
+          cd tests
+          coverage run --source=.. run_test.py
 
       - name: Report Coverage
         run: |
+          cd tests
           coverage report
 
       #- name: Setup tmate

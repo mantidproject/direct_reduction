@@ -16,6 +16,7 @@ class DGReductionTest(unittest.TestCase):
         cls.instpath = os.path.join(cls.repopath, 'InstrumentFiles')
         cls.outputpath = os.path.join(cls.repopath, 'tests')
         sys.path.append(cls.outputpath)
+        sys.path.append(cls.scriptpath)
         s_api.config['defaultsave.directory'] = cls.outputpath
         s_api.config.appendDataSearchDir(cls.datapath)
         for inst in ['let', 'maps', 'mari', 'merlin']:
@@ -63,7 +64,50 @@ class DGReductionTest(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28581_180meV.nxspe')))
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28581_29.8meV.nxspe')))
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28581_11.7meV.nxspe')))
+        #Load automatically calls `LoadNeXus` first which chokes on the file...
+        #ws = s_api.Load(os.path.join(self.outputpath, 'MAR28581_180meV.nxspe'))
 
+
+    def test_MARI_multiple_lowE(self):
+        subsdict = {'\nconfig':'\n#config',
+                    'save_dir = ':'save_dir = None #',
+                    'INSTRUMENT_NAME':'MARI',
+                    'MASK_FILE_XML':'mari_mask2023_1.xml',
+                    'RINGS_MAP_XML':'mari_res2013.map',
+                    'whitevan\s*=\s*[0-9]*':'whitevan = 28580',
+                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = [28727, 28728]',
+                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
+                    'wv_detrange\s*=\s*[\\[\\]0-9,]*':'wv_detrange = None',
+                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]*':'Ei_list = [1.84, 1.1]'}
+        infile = os.path.join(self.scriptpath, 'DG_reduction.py')
+        outfile = os.path.join(self.outputpath, 'mari_reduction_lowE.py')
+        self.substitute_file(infile, outfile, subsdict)
+        import mari_reduction_lowE
+        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28727_1.84meV.nxspe')))
+        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28727_1.1meV.nxspe')))
+
+
+    def test_existing_workspace(self):
+        subsdict = {'\nconfig':'\n#config',
+                    'save_dir = ':'save_dir = None #',
+                    'INSTRUMENT_NAME':'MARI',
+                    'MASK_FILE_XML':'mari_mask2023_1.xml',
+                    'RINGS_MAP_XML':'mari_res2013.map',
+                    'whitevan\s*=\s*[0-9]*':'whitevan = 28580',
+                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = ["ws_existing"]',
+                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
+                    'wv_detrange\s*=\s*[\\[\\]0-9,]*':'wv_detrange = None',
+                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]*':'Ei_list = [1.84, 1.1]'}
+        ws_existing = s_api.Load('MAR28728.raw', LoadMonitors='Exclude')
+        ws_existing = s_api.RemoveSpectra(ws_existing, [0])
+        infile = os.path.join(self.scriptpath, 'DG_reduction.py')
+        outfile = os.path.join(self.outputpath, 'mari_reduction_existing.py')
+        self.substitute_file(infile, outfile, subsdict)
+        import mari_reduction_existing
+        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28728_1.84meV.nxspe')))
+        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28728_1.1meV.nxspe')))
 
     def test_LET_QENS(self):
         # Checks that the reduction script runs for LET QENS and generates output files
@@ -91,6 +135,28 @@ class DGReductionTest(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET93338_3.7meV_red.nxs')))
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET93338_1.77meV_red.nxs')))
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET93338_1.03meV_red.nxs')))
+        ws = s_api.Load(os.path.join(self.outputpath, 'LET93338_3.7meV_red.nxs'))
+
+
+    def test_LET_same_angle(self):
+        subsdict = {'\nconfig':'\n#config',
+                    'save_dir = ':'save_dir = None #',
+                    'INSTRUMENT_NAME':'LET',
+                    'MASK_FILE_XML':'LET_mask_222.xml',
+                    'RINGS_MAP_XML':'LET_rings_222.xml',
+                    'whitevan\s*=\s*[0-9]*':'whitevan = 91329',
+                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = [92089, 92168]',
+                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_91329.txt\'',
+                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]*':'Ei_list = [3.7]',
+                    'powder\s*=\s*True': 'powder = False'}
+        s_api.config['default.instrument'] = 'LET'
+        infile = os.path.join(self.scriptpath, 'DG_reduction.py')
+        outfile = os.path.join(self.outputpath, 'let_reduction_angle.py')
+        self.substitute_file(infile, outfile, subsdict)
+        import let_reduction_angle
+        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET92089_3.7meV_1to1.nxspe')))
+        self.assertFalse(os.path.exists(os.path.join(self.outputpath, 'LET92168_3.7meV_1to1.nxspe')))
 
 
     def test_MERLIN(self):
@@ -117,6 +183,7 @@ class DGReductionTest(unittest.TestCase):
         self.substitute_file(infile, outfile, subsdict)
         import merlin_reduction
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MER59151_150meV_powder.nxspe')))
+        ws = s_api.Load(os.path.join(self.outputpath, 'MER59151_150meV_powder.nxspe'))
 
 
     def test_MAPS(self):
@@ -144,6 +211,7 @@ class DGReductionTest(unittest.TestCase):
         self.substitute_file(infile, outfile, subsdict)
         import maps_reduction
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAP41335_80meV_1to1.nxspe')))
+        ws = s_api.Load(os.path.join(self.outputpath, 'MAP41335_80meV_1to1.nxspe'))
 
 
 if __name__ == '__main__':
