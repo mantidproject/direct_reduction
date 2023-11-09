@@ -29,7 +29,7 @@ sumruns        = False                       # set to True to sum sample runs
 sample         = [93338]                     # sample runs (list)
 sample_bg      = 93329                       # single background run
 wv_file        = 'WV_91329.txt'              # white vanadium integral file (mandatory)
-Ei_list        = [3.71,1.035,1.775]          # incident energies (Ei) - from PyChop
+Ei_list        = ['auto']                    # incident energies (Ei) - from PyChop
 Erange         = [-0.8,0.0025,0.8]           # energy transfer range to output in fractions of Ei
 trans          = [0.95,0.95,0.95]            # elastic line transmission factors for each Ei
 mask           = 'MASK_FILE_XML'             # hard mask
@@ -37,13 +37,14 @@ mask           = 'MASK_FILE_XML'             # hard mask
 #  - 'replace': sum and replace first nxspe file created
 #  - 'ignore': ignore and create an nxspe for each run
 #  - 'accumulate': sum all runs with this angle when creating new nxspe
-same_angle_action = 'replace'
+same_angle_action = 'ignore'
 #========================================================
 
 #==================Absolute Units Inputs=================
 mv_file       = None        # pre-processed MV calibration
 sample_mass   = 1           # mass of the sample
 sample_fwt    = 50.9415     # formula weight of sample
+monovan_mass  = None        # Mass of vanadium sample (ask local contact)
 #========================================================
 
 #==================Local Contact Inputs==================
@@ -73,23 +74,23 @@ if inst == 'MARI':
     source = 'Moderator'
     m2spec = 2                  # specID of monitor2 (pre-sample)
     m3spec = 3                  # specID of monitor3 (post-sample)
-    monovan_mass = 32.58        # mass of vanadium cylinder
+    #monovan_mass = 32.58       # mass of vanadium cylinder
     same_angle_action = 'ignore'
 elif inst == 'MERLIN':
     source = 'undulator'
     m2spec = 69636              # specID of monitor2 (pre-sample)
     m3spec = 69640              # specID of monitor3 (post-sample)
-    monovan_mass = 32.62        # mass of vanadium cylinder
+    #monovan_mass = 32.62       # mass of vanadium cylinder
 elif inst == 'MAPS':
     source = 'undulator'
-    m2spec = 41475              # specID of monitor2 (pre-sample)
-    m3spec = 41476              # specID of monitor3 (post-sample)
-    monovan_mass = 30.1         # mass of vanadium cylinder
+    m2spec = 36867              # specID of monitor2 (pre-sample)
+    m3spec = 36868              # specID of monitor3 (post-sample)
+    #monovan_mass = 30.1        # mass of vanadium cylinder
 elif inst == 'LET':
     source = 'undulator'
     m2spec = 98310              # specID of monitor2 (pre-sample)
     m3spec = None               # specID of monitor3 (post-sample)
-    monovan_mass = 3.56         # mass of vanadium cylinder
+    #monovan_mass = 3.56        # mass of vanadium cylinder
 else:
     raise RuntimeError(f'Unrecognised instrument: {inst}')
 
@@ -124,7 +125,7 @@ def tryload(irun):              # loops till data file appears
             ws = Load(str(irun),LoadMonitors='Separate')
         except ValueError:
             print(f'...waiting for run #{irun}')
-            time.sleep(file_wait)
+            Pause(file_wait)
             continue
         break
     if inst == 'MARI':
@@ -179,9 +180,34 @@ if wv_file not in ws_list:
 else:
     print(f'{inst}: Using previously loaded white vanadium - {wv_file}')
 
+# =======================load background runs and sum=========================
+if sample_bg is not None:
+    ws_bg = load_sum(sample_bg)
+
+# =======================sum sample runs if required=========================
+sumsuf = sumruns and len(sample) > 1
+if sumruns:
+    ws = load_sum(sample)
+    sample = [sample[0]]
+
+is_auto = lambda x: isinstance(x, str) and 'auto' in x.lower()
+if is_auto(Ei_list) or hasattr(Ei_list, '__iter__') and is_auto(Ei_list[0]):
+    try:
+        Ei_list = autoei(ws)
+    except NameError:
+        fn = str(sample[0])
+        if not fn.startswith(inst[:3]): fn = f'{inst[:3]}{fn}'
+        if fn.endswith('.raw'): fn = fn[:-4]
+        Ei_list = autoei(LoadNexusMonitors(fn, OutputWorkspace='ws_tmp_mons'))
+    print(f"Automatically determined Ei's: {Ei_list}")
+    if len(trans) < len(Ei_list):
+        print(f'{inst}: WARNING - not enough transmision values for auto-Ei. ' \
+              'Extending list with last (end) value')
+        trans += [trans[-1]]*(len(Ei_list) - len(trans))
+
 # ===============================load monovan file===============================
 mv_fac = []
-if mv_file is not None:
+if mv_file is not None and monovan_mass is not None:
     if mv_file not in ws_list:
         print(f'{inst}: Loading monovan calibration factors - {mv_file}')
         LoadAscii(mv_file,OutputWorkspace=mv_file)
@@ -191,7 +217,7 @@ if mv_file is not None:
 # check that monovan is compatible with Ei_list)
     Ei_diff = sum([x-y for x,y in zip(mv_eis,Ei_list)])
     if (abs(Ei_diff) > 0):
-        print('----ERROR: Monovan file Eis not compatible with Ei_list')
+        raise RuntimeError('----ERROR: Monovan file Eis not compatible with Ei_list')
     for Ei in Ei_list:
         ii = np.where(mv_eis == Ei)
         mvf = mv_cal[ii][0]
@@ -202,16 +228,6 @@ if mv_file is not None:
 else:
     print(f'{inst}: Skipping absolute calibration')
     mv_fac = [x/x for x in Ei_list]     # monovan factors = 1 by default
-
-# =======================load background runs and sum=========================
-if sample_bg is not None:
-    ws_bg = load_sum(sample_bg)
-
-# =======================sum sample runs if required=========================
-sumsuf = sumruns and len(sample) > 1
-if sumruns:
-    ws = load_sum(sample)
-    sample = [sample[0]]
 
 # =====================angles cache stuff====================================
 if utils_loaded:
@@ -295,8 +311,8 @@ for irun in sample:
         # in the current monitor workspace (post monochromator) is at t=0 and L=0
         # note that the offest is not the predicted value due to energy dependence of the source position
 
-        if m3spec is not None and not fixei:
-            (Ei,mon2_peak,_,_) = GetEi(ws_monitors,Monitor1Spec=m2spec,Monitor2Spec=m3spec,EnergyEstimate=Ei)
+        if m3spec is not None:
+            (Ei,mon2_peak,_,_) = GetEi(ws_monitors,Monitor1Spec=m2spec,Monitor2Spec=m3spec,EnergyEstimate=Ei,FixEi=fixei)
             print(f'... refined Ei={Ei:.2f} meV')
         else:
             (Ei,mon2_peak,_,_) = GetEi(ws_monitors,Monitor2Spec=m2spec,EnergyEstimate=Ei,FixEi=fixei)
@@ -346,8 +362,8 @@ for irun in sample:
         print(f'{inst}: Writing {ofile}{saveformat}')
         if saveformat.lower() == '.nxspe':
             SaveNXSPE('ws_out', ofile+saveformat, Efixed=Ei, KiOverKfScaling=True)
-            if utils_loaded:
-                copy_inst_info(ofile+saveformat, 'ws_out')   # Copies instrument info for Horace
+            #if utils_loaded and not powder:
+            #    copy_inst_info(ofile+saveformat, 'ws_out')   # Copies instrument info for Horace
         elif saveformat.lower() == '.nxs':
             rmlogs = {'events_log', 'frame_log', 'good_frame_log', 'period_log', 'proton_charge', 'raw_events_log'}
             RemoveLogs('ws_out', KeepLogs=','.join(set(mtd['ws_out'].run().keys()).difference(rmlogs)))
