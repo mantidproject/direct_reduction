@@ -17,6 +17,7 @@
 # import mantid algorithms, numpy and matplotlib
 from mantid.simpleapi import *
 from mantid.api import AnalysisDataService as ADS
+from mantid.kernel.funcinspect import lhs_info
 import numpy as np
 import os, sys
 import time
@@ -60,6 +61,8 @@ idebug = False                  # keep workspaces and check absolute units on el
 save_dir = f'/instrument/{inst}/RBNumber/USER_RB_FOLDER'  # Set to None to avoid reseting
 psi_motor_name = 'rot'          # name of the rotation motor in the logs
 angles_workspace = 'angles_ws'  # name of workspace to store previously seen angles
+sumruns_savemem = False         # Compresses event in summed ws to save memory
+                                # (causes some loss of data so cannot use event filtering)
 #========================================================
 
 # ==============================setup directroties================================
@@ -139,6 +142,12 @@ def load_sum(run_list):
             w_buf = Plus('w_buf', 'ws')
             w_buf_monitors = Plus('w_buf_monitors', 'ws_monitors')
             print(f'run #{irun} added')
+    ADS.remove('ws')
+    ADS.remove('ws_monitors')
+    wsout_name = lhs_info('names')[0]
+    RenameWorkspace('w_buf_monitors', wsout_name+'_monitors')
+    return RenameWorkspace('w_buf', wsout_name)
+
 #========================================================
 
 
@@ -196,16 +205,12 @@ else:
 
 # =======================load background runs and sum=========================
 if sample_bg is not None:
-    load_sum(sample_bg)
-    ws_bg = CloneWorkspace('w_buf')
-    ws_bg = NormaliseByCurrent('ws_bg')
+    ws_bg = load_sum(sample_bg)
 
 # =======================sum sample runs if required=========================
 sumsuf = sumruns and len(sample) > 1
 if sumruns:
-    load_sum(sample)
-    ws = CloneWorkspace('w_buf')
-    ws_monitors = CloneWorkspace('w_buf_monitors')
+    ws = load_sum(sample)
     sample = [sample[0]]
 
 # =====================angles cache stuff====================================
@@ -236,7 +241,7 @@ for irun in sample:
         if same_angle_action.lower() != 'ignore':
             runs_with_same_angles = get_angle(irun, angles_workspace, psi_motor_name, tryload)
             if len(runs_with_same_angles) > 1:
-                load_sum(runs_with_same_angles)
+                w_buf = load_sum(runs_with_same_angles)
                 if same_angle_action.lower() == 'replace':
                     irun = runs_with_same_angles[0]
                     runs_with_angles_already_seen += runs_with_same_angles
@@ -244,6 +249,13 @@ for irun in sample:
             tryload(irun)
             print(f'Loading run# {irun}')
     ws = NormaliseByCurrent('ws')
+    if sumruns_savemem:
+        ws = CompressEvents(ws, Tolerance=1e-5)  # Tolerance in microseconds
+
+    # instrument geometry to work out ToF ranges
+    sampos = ws.getInstrument().getSample().getPos()
+    l1 = (sampos - ws.getInstrument().getSource().getPos()).norm()
+    l2 = (ws.getDetector(0).getPos() - sampos).norm()
 
 # ============================= Ei loop =====================================
     for ienergy in range(len(Ei_list)):
@@ -253,15 +265,20 @@ for irun in sample:
         mvf = mv_fac[ienergy]
         print(f'\n{inst}: Reducing data for Ei={Ei:.2f} meV')
 
-        ws_corrected = Scale('ws', 1 / tr, 'Multiply')
+        tof_min = np.sqrt(l1**2 * 5.227e6 / Ei)
+        tof_max = tof_min + np.sqrt(l2**2 * 5.226e6 / (Ei*(1-Erange[-1])))
+        ws_rep = CropWorkspace(ws, tof_min, tof_max)
+
         if sample_bg is not None:
             print(f'... subtracting background - transmission factor = {tr:.2f}')
-            ws_corrected  = ws/tr - ws_bg
+            ws_rep  = ws_rep/tr - ws_bg
+        else:
+            ws_rep = Scale('ws_rep', 1 / tr, 'Multiply')
 
         # normalise to WB vanadium and apply fixed mask
         print('... normalising/masking data')
-        ws_norm = Divide('ws_corrected', wv_file)       # white beam normalisation
-        MaskDetectors(ws_norm,MaskedWorkspace=mask,ForceInstrumentMasking=True)
+        ws_rep = Divide('ws_rep', wv_file)       # white beam normalisation
+        MaskDetectors(ws_rep, MaskedWorkspace=mask, ForceInstrumentMasking=True)
 
         # t2e section
         print('... t2e section')
@@ -272,7 +289,7 @@ for irun in sample:
 
         if inst == 'MARI' and utils_loaded and origEi < 4.01:
             # Shifts data / monitors into second frame for MARI
-            ws_norm, ws_monitors = shift_frame_for_mari_lowE(origEi, wsname='ws_norm', wsmon='ws_monitors')
+            ws_rep, ws_monitors = shift_frame_for_mari_lowE(origEi, wsname='ws_rep', wsmon='ws_monitors')
 
         # this section shifts the time-of-flight such that the monitor2 peak
         # in the current monitor workspace (post monochromator) is at t=0 and L=0
@@ -286,13 +303,14 @@ for irun in sample:
 
         print(f'... m2 tof={mon2_peak:.2f} mus, m2 pos={m2pos:.2f} m')
 
-        ws_norm = ScaleX(ws_norm, Factor=-mon2_peak, Operation='Add', InstrumentParameter='DelayTime', Combine=True)
-        MoveInstrumentComponent(ws_norm, ComponentName=source, Z=m2pos, RelativePosition=False)
+        ws_rep = ScaleX(ws_rep, Factor=-mon2_peak, Operation='Add', InstrumentParameter='DelayTime', Combine=True)
+        MoveInstrumentComponent(ws_rep, ComponentName=source, Z=m2pos, RelativePosition=False)
 
-        ws_out = ConvertUnits(ws_norm, 'DeltaE', EMode='Direct', EFixed=Ei)
-        ws_out = Rebin(ws_out, [x*origEi for x in Erange], PreserveEvents=False)
+        ws_rep = ConvertUnits(ws_rep, 'DeltaE', EMode='Direct', EFixed=Ei)
+        ws_out = Rebin(ws_rep, [x*origEi for x in Erange], PreserveEvents=False)
         ws_out = DetectorEfficiencyCor(ws_out, IncidentEnergy=Ei)
         ws_out = CorrectKiKf(ws_out, Efixed=Ei, EMode='Direct')
+        ADS.remove('ws_rep')
 
         # monovan scaling
         if mv_file is not None:
