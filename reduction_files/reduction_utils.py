@@ -7,6 +7,7 @@ import warnings
 import importlib
 import types
 from os.path import abspath, dirname
+from mantid.kernel.funcinspect import lhs_info
 
 #========================================================
 # General utility functions
@@ -151,12 +152,13 @@ def remove_extra_spectra_if_mari(wsname='ws'):
 
 def shift_frame_for_mari_lowE(origEi, wsname='ws_norm', wsmon='ws_monitors'):
     ws_norm, ws_monitors = (mtd[wsname], mtd[wsmon])
+    ws_out, wsmon_out = lhs_info('names')
     if origEi < 4.01:
         # If Ei < 4, mon 3 is in 2nd frame so need to shift it by 20ms
-        ws_monitors = ScaleX(wsmon, 20000, Operation='Add', IndexMin=2, IndexMax=2, OutputWorkspace=wsmon)
+        ws_monitors = ScaleX(wsmon, 20000, Operation='Add', IndexMin=2, IndexMax=2, OutputWorkspace=wsmon_out)
         if origEi < 3.1:
             # Additionally if Ei<3.1, data will also be in 2nd frame, shift all ToF by 20ms
-            ws_norm = ScaleX(wsname, 20000, Operation='Add', IndexMin=0, IndexMax=ws_norm.getNumberHistograms()-1, OutputWorkspace=wsname)
+            ws_norm = ScaleX(wsname, 20000, Operation='Add', IndexMin=0, IndexMax=ws_norm.getNumberHistograms()-1, OutputWorkspace=ws_out)
     return ws_norm, ws_monitors
 
 #========================================================
@@ -346,7 +348,7 @@ class DG_reduction_wrapper:
                 'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
                 'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
                 'wv_detrange\s*=\s*[\\[\\]0-9,]*':'wv_detrange = None',
-                'Ei_list\s*=\s*[\\[\\]\\.0-9,]+':'Ei_list = [1.84, 1.1]'}
+                'Ei_list\s*=\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [1.84, 1.1]'}
 
     def __init__(self):
         self.curdir = abspath(dirname(__file__))
@@ -400,10 +402,11 @@ def run_monovan(**kwargs):
 def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=False, **kwargs):
     wv_name = wbvan if (isinstance(wbvan, (str, int, float)) or len(wbvan)==1) else wbvan[0]
     wv_file = f'WV_{wv_name}.txt'
+    wv_args = {'inst':kwargs['inst']} if 'inst' in kwargs else {}
     try:
         LoadAscii(wv_file, OutputWorkspace=wv_file)
     except ValueError:
-        run_whitevan(whitevan=wbvan)
+        run_whitevan(whitevan=wbvan, **wv_args)
     Ei_list = ei if hasattr(ei, '__iter__') else [ei]
     if 'hard_mask_file' in kwargs:
         kwargs['mask'] = kwargs.pop('hard_mask_file')
@@ -412,8 +415,11 @@ def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=
     if monovan is not None and isinstance(monovan, (int, float)) and monovan > 0:
         mv_file = f'MV_{monovan}.txt'
         mvkw = {'mask':kwargs['mask']} if 'mask' in kwargs else {}
+        if 'inst' in kwargs: mvkw['inst'] = kwargs['inst']
         try:
             LoadAscii(wv_file, OutputWorkspace=wv_file)
         except ValueError:
             run_monovan(monovan=monovan, Ei_list=Ei_list, wv_file=wv_file, **mvkw)
+        kwargs['sample_mass'] = sam_mass
+        kwargs['sample_fwt'] = sam_rmm
     run_reduction(sample=runno, Ei_list=ei if hasattr(ei, '__iter__') else [ei], wv_file=wv_file, **kwargs)

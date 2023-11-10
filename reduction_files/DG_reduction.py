@@ -151,8 +151,11 @@ def load_sum(run_list):
     ADS.remove('ws')
     ADS.remove('ws_monitors')
     wsout_name = lhs_info('names')[0]
-    RenameWorkspace('w_buf_monitors', wsout_name+'_monitors')
-    return RenameWorkspace('w_buf', wsout_name)
+    if wsout_name != 'w_buf':
+        RenameWorkspace('w_buf_monitors', wsout_name+'_monitors')
+        return RenameWorkspace('w_buf', wsout_name)
+    else:
+        return mtd['w_buf']
 
 #========================================================
 
@@ -203,6 +206,7 @@ if is_auto(Ei_list) or hasattr(Ei_list, '__iter__') and is_auto(Ei_list[0]):
         fn = str(sample[0])
         if not fn.startswith(inst[:3]): fn = f'{inst[:3]}{fn}'
         if fn.endswith('.raw'): fn = fn[:-4]
+        if not fn.endswith('.nxs'): fn += '.nxs'
         Ei_list = autoei(LoadNexusMonitors(fn, OutputWorkspace='ws_tmp_mons'))
     print(f"Automatically determined Ei's: {Ei_list}")
     if len(trans) < len(Ei_list):
@@ -262,7 +266,7 @@ for irun in sample:
         if same_angle_action.lower() != 'ignore':
             runs_with_same_angles = get_angle(irun, angles_workspace, psi_motor_name, tryload)
             if len(runs_with_same_angles) > 1:
-                w_buf = load_sum(runs_with_same_angles)
+                ws = load_sum(runs_with_same_angles)
                 if same_angle_action.lower() == 'replace':
                     irun = runs_with_same_angles[0]
                     runs_with_angles_already_seen += runs_with_same_angles
@@ -286,8 +290,13 @@ for irun in sample:
         mvf = mv_fac[ienergy]
         print(f'\n{inst}: Reducing data for Ei={Ei:.2f} meV')
 
-        tof_min = np.sqrt(l1**2 * 5.227e6 / Ei)
-        tof_max = tof_min + np.sqrt(l2**2 * 5.226e6 / (Ei*(1-Erange[-1])))
+        if inst == 'MARI' and utils_loaded and origEi < 4.01:
+            # Shifts data / monitors into second frame for MARI
+            ws, ws_monitors = shift_frame_for_mari_lowE(origEi, wsname='ws', wsmon='ws_monitors')
+
+        tofs = ws.readX(0)
+        tof_min = max(tofs[0], np.sqrt(l1**2 * 5.227e6 / Ei))
+        tof_max = min(tofs[-1], tof_min + np.sqrt(l2**2 * 5.226e6 / (Ei*(1-Erange[-1]))))
         ws_rep = CropWorkspace(ws, tof_min, tof_max)
 
         if sample_bg is not None:
@@ -307,10 +316,6 @@ for irun in sample:
         spectra = ws_monitors.getSpectrumNumbers()
         index = spectra.index(m2spec)
         m2pos = mtd['ws'].detectorInfo().position(index)[2]
-
-        if inst == 'MARI' and utils_loaded and origEi < 4.01:
-            # Shifts data / monitors into second frame for MARI
-            ws_rep, ws_monitors = shift_frame_for_mari_lowE(origEi, wsname='ws_rep', wsmon='ws_monitors')
 
         # this section shifts the time-of-flight such that the monitor2 peak
         # in the current monitor workspace (post monochromator) is at t=0 and L=0
