@@ -1,9 +1,12 @@
 from mantid.simpleapi import *
 from mantid.api import AnalysisDataService as ADS
 import numpy as np
-import re, os, h5py
+import re, os, sys, h5py
 import json
 import warnings
+import importlib
+import types
+from os.path import abspath, dirname
 
 #========================================================
 # General utility functions
@@ -324,3 +327,93 @@ def autoei(ws):
 
     else:
         raise RuntimeError(f'Instrument {inst} not supported')
+
+
+#========================================================
+# Iliad driver routines
+
+_DGRED = None
+
+class DG_reduction_wrapper:
+
+    subsdict = {'\nconfig':'\n#config',
+                'save_dir = ':'save_dir = None #',
+                'INSTRUMENT_NAME':'MARI',
+                'MASK_FILE_XML':'mari_mask2023_1.xml',
+                'RINGS_MAP_XML':'mari_res2013.map',
+                'whitevan\s*=\s*[0-9]*':'whitevan = 28580',
+                'sample\s*=\s*\\[*[\\]0-9,]+':'sample = [28727, 28728]',
+                'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
+                'wv_detrange\s*=\s*[\\[\\]0-9,]*':'wv_detrange = None',
+                'Ei_list\s*=\s*[\\[\\]\\.0-9,]+':'Ei_list = [1.84, 1.1]'}
+
+    def __init__(self):
+        self.curdir = abspath(dirname(__file__))
+        self.reduction = self.load_code(os.path.join(self.curdir, 'DG_reduction.py'))
+        self.whitevan = self.load_code(os.path.join(self.curdir, 'DG_whitevan.py'))
+        self.monovan = self.load_code(os.path.join(self.curdir, 'DG_monovan.py'))
+
+    def load_code(self, filename):
+        loader = importlib.machinery.SourceFileLoader('<dgredwrapper>', filename)
+        # Loads the main reduction script and compiles it to bytecode
+        src = loader.get_data(filename).decode()
+        for ky, val in self.subsdict.items():
+            src = re.sub(ky, val, src)
+        x0, x1 = (src.find('#!begin_params'), src.find('#!end_params'))
+        src_body = (src[:x0] + src[x1:]).encode()
+        code = loader.source_to_code(src_body, filename)
+        # Parses the variables section
+        src_param = src[x0:x1]
+        tmp_mod = types.ModuleType('dgredwrapper_param')
+        exec(src_param, tmp_mod.__dict__)
+        params = {k:getattr(tmp_mod, k) for k in dir(tmp_mod) if not k.startswith('_')}
+        return code, params
+
+    def __call__(self, mod='reduction', **kwargs):
+        code, params = getattr(self, mod)
+        env = params
+        tmp_mod = types.ModuleType('DG_red_exec')
+        tmp_mod.__file__ = os.path.join(self.curdir, f'DG_{mod}.py')
+        env.update(tmp_mod.__dict__)
+        env.update(kwargs)
+        exec(code, env)
+
+def run_reduction(**kwargs):
+    global _DGRED
+    if _DGRED is None:
+        _DGRED = DG_reduction_wrapper()
+    _DGRED(**kwargs)
+
+def run_whitevan(**kwargs):
+    global _DGRED
+    if _DGRED is None:
+        _DGRED = DG_reduction_wrapper()
+    _DGRED(mod='whitevan', **kwargs)
+
+def run_monovan(**kwargs):
+    global _DGRED
+    if _DGRED is None:
+        _DGRED = DG_reduction_wrapper()
+    _DGRED(mod='monovan', **kwargs)
+
+def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=False, **kwargs):
+    wv_name = wbvan if (isinstance(wbvan, (str, int, float)) or len(wbvan)==1) else wbvan[0]
+    wv_file = f'WV_{wv_name}.txt'
+    try:
+        LoadAscii(wv_file, OutputWorkspace=wv_file)
+    except ValueError:
+        run_whitevan(whitevan=wbvan)
+    Ei_list = ei if hasattr(ei, '__iter__') else [ei]
+    if 'hard_mask_file' in kwargs:
+        kwargs['mask'] = kwargs.pop('hard_mask_file')
+    if 'sumruns' not in kwargs and sum_runs is True:
+        kwargs['sumruns'] = True
+    if monovan is not None and isinstance(monovan, (int, float)) and monovan > 0:
+        mv_file = f'MV_{monovan}.txt'
+        mvkw = {'mask':kwargs['mask']} if 'mask' in kwargs else {}
+        try:
+            LoadAscii(wv_file, OutputWorkspace=wv_file)
+        except ValueError:
+            run_monovan(monovan=monovan, Ei_list=Ei_list, wv_file=wv_file, **mvkw)
+    run_reduction(sample=runno, Ei_list=ei if hasattr(ei, '__iter__') else [ei], wv_file=wv_file, **kwargs)

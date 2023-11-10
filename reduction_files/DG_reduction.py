@@ -23,6 +23,7 @@ import os, sys
 import time
 from importlib import reload
 
+#!begin_params
 #=======================User Inputs=======================
 powder         = True                        # powder or 1to1 map
 sumruns        = False                       # set to True to sum sample runs
@@ -65,6 +66,7 @@ angles_workspace = 'angles_ws'  # name of workspace to store previously seen ang
 sumruns_savemem = False         # Compresses event in summed ws to save memory
                                 # (causes some loss of data so cannot use event filtering)
 #========================================================
+#!end_params
 
 # ==============================setup directroties================================
 config['default.instrument'] = inst
