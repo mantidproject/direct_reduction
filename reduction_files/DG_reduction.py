@@ -111,6 +111,9 @@ except ImportError:
     utils_loaded = False
     def rename_existing_ws(*a, **k): raise RuntimeError('Unable to load utils')
     def remove_extra_spectra_if_mari(*a, **k): raise RuntimeError('Unable to load utils')
+    def autoei(*a, **k):
+        raise RuntimeError('Cannot use Auto-Ei: ' \
+            'You need to copy the reduction_utils.py file somewhere on the Python path')
 
 #========================================================
 # Helper functions
