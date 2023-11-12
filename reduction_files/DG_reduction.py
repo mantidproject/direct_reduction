@@ -39,6 +39,16 @@ mask           = 'MASK_FILE_XML'             # hard mask
 #  - 'ignore': ignore and create an nxspe for each run
 #  - 'accumulate': sum all runs with this angle when creating new nxspe
 same_angle_action = 'ignore'
+# to enable creating multiple reduced data files from a single
+# "continuous scan" set the following variables to a valid log "block"
+# name and the bin size (width) to something larger than zero.
+# An optional unit can be given.
+# If sumruns=True, the sample list is summed and then divided
+# If sumruns=False and multiple sample runs are listed, an error is raised.
+# This is also only compatible with same_angle_action='ignore'
+cs_block = None
+cs_block_unit = ''
+cs_bin_size = 0
 #========================================================
 
 #==================Absolute Units Inputs=================
@@ -65,6 +75,7 @@ psi_motor_name = 'rot'          # name of the rotation motor in the logs
 angles_workspace = 'angles_ws'  # name of workspace to store previously seen angles
 sumruns_savemem = False         # Compresses event in summed ws to save memory
                                 # (causes some loss of data so cannot use event filtering)
+cs_smidge = 0.001               # Tolerance on continuous scan bins size
 #========================================================
 #!end_params
 
@@ -137,25 +148,29 @@ def tryload(irun):              # loops till data file appears
         remove_extra_spectra_if_mari('ws')
     return mtd['ws']
 
-def load_sum(run_list):
+def load_sum(run_list, block_name=None):
     for ii, irun in enumerate(run_list):
         tryload(irun)
         if ii == 0:
             w_buf = CloneWorkspace('ws')
             w_buf_monitors = CloneWorkspace('ws_monitors')
+            if block_name:
+                bval = mtd['ws'].getRun().getLogData(block_name).filtered_value
             print(f'run #{irun} loaded')
         else:
             w_buf = Plus('w_buf', 'ws')
             w_buf_monitors = Plus('w_buf_monitors', 'ws_monitors')
+            if block_name:
+                bv2 = mtd['ws'].getRun().getLogData(block_name).filtered_value
+                bval = np.concatenate((bval, bv2))
             print(f'run #{irun} added')
     ADS.remove('ws')
     ADS.remove('ws_monitors')
     wsout_name = lhs_info('names')[0]
     if wsout_name != 'w_buf':
         RenameWorkspace('w_buf_monitors', wsout_name+'_monitors')
-        return RenameWorkspace('w_buf', wsout_name)
-    else:
-        return mtd['w_buf']
+        RenameWorkspace('w_buf', wsout_name)
+    return (mtd[wsout_name], bval) if block_name else mtd[wsout_name]
 
 #========================================================
 
@@ -191,6 +206,31 @@ else:
 # =======================load background runs and sum=========================
 if sample_bg is not None:
     ws_bg = load_sum(sample_bg)
+
+# ==========================continuous scan stuff=============================
+if cs_block and cs_bin_size > 0:
+    if len(sample) > 1 and not sumruns:
+        raise RuntimeError('Continous scans for multiple (non-summed) files not supported')
+    if same_angle_action.lower() != 'ignore':
+        raise RuntimeError(f'Continous scans not compatible with same_angle_action="{same_angle_action}"')
+    # Sets sumruns false so don't redo the sum below. Instead sum here to get filtered block values.
+    # This is due to a bug in the Mantid "Plus" algorithm, which gives incorrect filtered values
+    # https://github.com/mantidproject/mantid/issues/36194
+    sumruns = False
+    ws_full, bval = load_sum(sample, cs_block)
+    ws_monitors = CloneWorkspace('ws_full_monitors')
+    bval_range = max(bval) - min(bval)
+    bval_nbins = int(bval_range / cs_bin_size)
+    bval_remainder = bval_range - cs_bin_size * bval_nbins
+    # Overrides the sample list in order to hijack the loop over run numbers below
+    irun_orig = sample[0]
+    sample = [x*cs_bin_size + min(bval) for x in range(bval_nbins)]
+    unit = cs_block_unit
+    if not unit:
+        unit = ws_full.getRun().getLogData(cs_block).units
+    print(f'{cs_block} = {min(bval):.1f} {unit} to {max(bval):.1f} {unit}')
+    print(f'... filtering in {cs_bin_size:.1f} {unit} steps')
+    print(f'... N={bval_nbins} bins with {bval_remainder:.2f} {unit} remainder')
 
 # =======================sum sample runs if required=========================
 sumsuf = sumruns and len(sample) > 1
@@ -256,12 +296,19 @@ for irun in sample:
         for ss in nx_list:
             ADS.remove(ss)
 
+    # For continuous scans generate the workspace based on binned log values
+    # NB. we replaced the sample (run) list with list of block min bin boundaries
+    if cs_block and cs_bin_size > 0:
+        val = round(irun + cs_bin_size/2,1)
+        print(f"Filtering: {cs_block}={val:.1f} ± {round(cs_bin_size/2,2):.2f} {unit}")
+        ws = FilterByLogValue(ws_full, cs_block, irun, irun + cs_bin_size - cs_smidge)
+
     # if this run is at an angle already seen and we are doing 'replace', skip
     if same_angle_action.lower() != 'ignore' and irun in runs_with_angles_already_seen:
         continue
 
     print('============')
-    if not sumruns:
+    if not sumruns and not cs_block:
         # Checks rotation angle
         if same_angle_action.lower() != 'ignore':
             runs_with_same_angles = get_angle(irun, angles_workspace, psi_motor_name, tryload)
@@ -273,8 +320,9 @@ for irun in sample:
         else:
             tryload(irun)
             print(f'Loading run# {irun}')
+
     ws = NormaliseByCurrent('ws')
-    if sumruns_savemem:
+    if sumruns and sumruns_savemem:
         ws = CompressEvents(ws, Tolerance=1e-5)  # Tolerance in microseconds
 
     # instrument geometry to work out ToF ranges
@@ -290,14 +338,13 @@ for irun in sample:
         mvf = mv_fac[ienergy]
         print(f'\n{inst}: Reducing data for Ei={Ei:.2f} meV')
 
-        if inst == 'MARI' and utils_loaded and origEi < 4.01:
-            # Shifts data / monitors into second frame for MARI
-            ws, ws_monitors = shift_frame_for_mari_lowE(origEi, wsname='ws', wsmon='ws_monitors')
+        # Low energy reps on MARI end up in the second frame
+        t_shift = 20000 if inst == 'MARI' and origEi < 3.1 else 0
 
         tofs = ws.readX(0)
-        tof_min = max(tofs[0], np.sqrt(l1**2 * 5.227e6 / Ei))
-        tof_max = min(tofs[-1], tof_min + np.sqrt(l2**2 * 5.226e6 / (Ei*(1-Erange[-1]))))
-        ws_rep = CropWorkspace(ws, tof_min, tof_max)
+        tof_min = np.sqrt(l1**2 * 5.227e6 / Ei) - t_shift
+        tof_max = tof_min + np.sqrt(l2**2 * 5.226e6 / (Ei*(1-Erange[-1])))
+        ws_rep = CropWorkspace(ws, max(min(tofs), tof_min), min(max(tofs), tof_max))
 
         if sample_bg is not None:
             print(f'... subtracting background - transmission factor = {tr:.2f}')
@@ -315,7 +362,11 @@ for irun in sample:
         ws_monitors = mtd['ws_monitors']
         spectra = ws_monitors.getSpectrumNumbers()
         index = spectra.index(m2spec)
-        m2pos = mtd['ws'].detectorInfo().position(index)[2]
+        m2pos = ws.detectorInfo().position(index)[2]
+
+        if inst == 'MARI' and utils_loaded and origEi < 4.01:
+            # Shifts data / monitors into second frame for MARI
+            ws_rep, ws_monitors = shift_frame_for_mari_lowE(origEi, wsname='ws_rep', wsmon='ws_monitors')
 
         # this section shifts the time-of-flight such that the monitor2 peak
         # in the current monitor workspace (post monochromator) is at t=0 and L=0
@@ -343,14 +394,23 @@ for irun in sample:
             print(f'... applying mono van calibration factor {mvf:.1f}')
         ws_out = Scale('ws_out', mvf, 'Multiply')
 
+        # Sets output file name
+        if cs_block and cs_bin_size > 0:
+            ofile_prefix = f'{inst[:3]}{irun_orig}'
+            ofile_suffix = f"_{val:.1f}{unit}"
+        else:
+            ofile_prefix = f'{inst[:3]}{irun}'
+            ofile_suffix = ''
+
         # rings grouping if desired
-        ofile_suffix='_1to1'
         if powder or inst == 'MARI' or QENS:
             ws_out=GroupDetectors(ws_out, MapFile=powdermap, Behaviour='Average')
-            ofile_suffix = '_powder'
+            ofile_suffix += '_powder'
             if inst == 'MARI' or QENS:
                 ofile_suffix = ''
             print(f'... powder grouping using {powdermap}')
+        else:
+            ofile_suffix += '_1to1'
         if inst == 'MARI':
             if sumsuf:
                 ofile_suffix += 'sum'
@@ -358,7 +418,7 @@ for irun in sample:
                 ofile_suffix += '_sub'
 
         # output nxspe file
-        ofile = f'{inst[:3]}{irun}_{origEi:g}meV{ofile_suffix}'
+        ofile = f'{ofile_prefix}_{origEi:g}meV{ofile_suffix}'
 
         # check elastic line (debug mode)
         if idebug:

@@ -110,6 +110,7 @@ class DGReductionTest(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MARws_existing_1.84meV.nxspe')))
         self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MARws_existing_1.1meV.nxspe')))
 
+
     def test_LET_QENS(self):
         # Checks that the reduction script runs for LET QENS and generates output files
         subsdict = {'\nconfig':'\n#config',
@@ -230,11 +231,19 @@ class DGReductionTest(unittest.TestCase):
         wv_file = os.path.join(self.outputpath, 'WV_28580.txt')
         if os.path.exists(wv_file):
             os.remove(wv_file)
-        s_api.config['default.instrument'] = 'MARI'
         from reduction_utils import iliad
         iliad(28581, ei='auto', wbvan=28580, inst='MARI', hard_mask_file='mari_mask2023_1.xml',
               powdermap='mari_res2013.map')
 
+
+    def test_func_continuous(self):
+        from reduction_utils import run_reduction
+        run_reduction(sample=[97138, 97139], Ei_list=[1.7], sumruns=True, wv_file='WV_91329.txt', 
+                      inst='LET', mask='LET_mask_222.xml', powdermap='LET_rings_222.xml',
+                      cs_block='T_Stick', cs_block_unit='K', cs_bin_size=10)
+        for tt in np.arange(197.9, 288, 10):
+            self.assertTrue(os.path.exists(os.path.join(self.outputpath, f'LET97138_1.7meV_{tt}K_powder.nxspe')))
+        
 
 if __name__ == '__main__':
     unittest.main()

@@ -381,28 +381,27 @@ class DG_reduction_wrapper:
         env.update(kwargs)
         exec(code, env)
 
-def run_reduction(**kwargs):
+def run_reduction(mod='reduction', **kwargs):
     global _DGRED
     if _DGRED is None:
         _DGRED = DG_reduction_wrapper()
-    _DGRED(**kwargs)
+    if 'inst' in kwargs:
+        config['default.instrument'] = kwargs['inst']
+    _DGRED(mod=mod, **kwargs)
 
 def run_whitevan(**kwargs):
-    global _DGRED
-    if _DGRED is None:
-        _DGRED = DG_reduction_wrapper()
-    _DGRED(mod='whitevan', **kwargs)
+    run_reduction(mod='whitevan', **kwargs)
 
 def run_monovan(**kwargs):
-    global _DGRED
-    if _DGRED is None:
-        _DGRED = DG_reduction_wrapper()
-    _DGRED(mod='monovan', **kwargs)
+    run_reduction(mod='monovan', **kwargs)
 
 def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=False, **kwargs):
     wv_name = wbvan if (isinstance(wbvan, (str, int, float)) or len(wbvan)==1) else wbvan[0]
     wv_file = f'WV_{wv_name}.txt'
-    wv_args = {'inst':kwargs['inst']} if 'inst' in kwargs else {}
+    wv_args = {}
+    if 'inst' in kwargs:
+        config['default.instrument'] = kwargs['inst']
+        wv_args = {'inst':kwargs['inst']}
     try:
         LoadAscii(wv_file, OutputWorkspace=wv_file)
     except ValueError:
