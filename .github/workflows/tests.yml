@@ -46,7 +46,7 @@ jobs:
         with:
           path: |
             InstrumentFiles
-            datafiles
+            direct_reduction_test
           key: cached-data-${{ hashFiles('**/cached_git_hashes') }}
 
       - name: Install Mantid
@@ -58,14 +58,13 @@ jobs:
         run: |
           git clone https://github.com/pace-neutrons/InstrumentFiles.git
           git clone https://github.com/mducle/direct_reduction_test.git
-          cp -rpa direct_reduction_test/datafiles ./
 
       - name: Update data instrument files
         run: |
           cwd=$(pwd)
-          cd $cwd/InstrumentFiles && git pull && git rev-parse --short HEAD > ../datafiles/cached_git_hashes
+          cd $cwd/InstrumentFiles && git pull && git rev-parse --short HEAD > ../direct_reduction_test/cached_git_hashes
           cd $cwd/direct_reduction_test && git pull && git rev-parse --short HEAD >> cached_git_hashes
-          cd $cwd && rsync -av direct_reduction_test/datafiles/ datafiles/
+          cd $cwd && cp -rpa direct_reduction_test/datafiles ./
 
       - name: Run Tests and Coverage
         run: |
