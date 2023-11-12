@@ -14,11 +14,13 @@
 # import mantid algorithms, numpy and matplotlib
 from mantid.simpleapi import *
 from mantid.api import AnalysisDataService as ADS
+from mantid.kernel.funcinspect import lhs_info
 import numpy as np
 import time
 
 t = time.time()         #start the clock
 
+#!begin_params
 #=======================User Inputs======================
 whitevan       = 78715                  # white vanadium run
 whitevan_bg    = None                   # background for the white vanadium
@@ -33,6 +35,7 @@ wv_detrange = [30000,60000]             # spectrum index range for average inten
 idebug = False                          # keep itermediate workspaces for debugging
 save_dir = f'/instrument/{inst}/RBNumber/USER_RB_FOLDER' # Set to None to avoid resetting
 #========================================================
+#!end_params
 
 config['default.instrument'] = inst
 if save_dir is not None:
@@ -40,28 +43,49 @@ if save_dir is not None:
 cycle_shortform = cycle[2:] if cycle.startswith('20') else cycle
 data_dir = f'/archive/NDX{inst}/Instrument/data/cycle_{cycle_shortform}/'
 config.appendDataSearchDir(data_dir)
-config.appendDataSearchDir(save_dir)
+if save_dir is not None:
+    config.appendDataSearchDir(save_dir)
 
 #========================================================
-def try_load_no_mon(irun, ws_name):
+def try_load_no_mon(irun, ws_name=None):
     # LoadISISNexus needs LoadMonitors='Exclude'
     # LoadEventNexus needs LoadMonitors=False
+    if ws_name is None:
+        nret, ws_name = lhs_info('both')
+        if nret > 1:
+            raise RuntimeError('load: Only one output workspace name can be given')
+        ws_name = ws_name[0]
     try:
         return Load(str(irun), LoadMonitors='Exclude', OutputWorkspace=ws_name)
     except ValueError:
         return Load(str(irun), LoadMonitors=False, OutputWorkspace=ws_name)
+
+def load_sum(run_list):
+    if isinstance(run_list, str) or not hasattr(run_list, '__iter__'):
+        run_list = [run_list]
+    for ii, irun in enumerate(run_list):
+        try_load_no_mon(irun, 'ws')
+        if ii == 0:
+            w_buf = CloneWorkspace('ws')
+            print(f'run #{irun} loaded')
+        else:
+            w_buf = Plus('w_buf', 'ws')
+            print(f'run #{irun} added')
+    nret, ws_name = lhs_info('both')
+    if nret == 1:
+        CloneWorkspace('w_buf', OutputWorkspace=ws_name[0])
 #========================================================
 
 print(f'\n======= {inst} white van reduction =======')
 
 # =================load white van and background and subtract=====================
-print(f'WHITE_VAN {inst}: Loading white vanadium run# {whitevan}')
-wv = try_load_no_mon(str(whitevan), 'wv')
+print(f'WHITE_VAN {inst}: Loading white vanadium run(s)')
+wv = load_sum(whitevan)
 wv = NormaliseByCurrent('wv')
 wv_corrected = Scale('wv', 1/whitevan_trans, 'Multiply')
 if (whitevan_bg is not None):
-    print(f'... subtracting white vanadium background run# {whitevan_bg}')
-    wv_bg = try_load_no_mon(str(whitevan_bg), 'wv_bg')
+    print(f'... subtracting white vanadium background run(s)')
+    wv_bg = load_sum(whitevan_bg)
     wv_bg = NormaliseByCurrent('wv_bg')
     wv_corrected = wv/whitevan_trans - wv_bg
 
@@ -78,7 +102,8 @@ scale_factor = len(wv_normt.dataY(0)) / wv_scale.dataY(0)[0]
 WV_normalised_integrals = Scale(WV_normalised_integrals, scale_factor, 'Multiply')
 
 # ===========================output integrals file================================
-ofile = f'WV_{whitevan}.txt'
+wv_name = whitevan if (isinstance(whitevan, (str, int, float)) or len(whitevan)==1) else whitevan[0]
+ofile = f'WV_{wv_name}.txt'
 print(f'WHITE_VAN {inst}: Saving integrals in {ofile}')
 print(f'... average intensity = {1/scale_factor:.2f}')
 SaveAscii(WV_normalised_integrals, ofile)

@@ -17,18 +17,20 @@
 # import mantid algorithms, numpy and matplotlib
 from mantid.simpleapi import *
 from mantid.api import AnalysisDataService as ADS
+from mantid.kernel.funcinspect import lhs_info
 import numpy as np
 import os, sys
 import time
 from importlib import reload
 
+#!begin_params
 #=======================User Inputs=======================
 powder         = True                        # powder or 1to1 map
 sumruns        = False                       # set to True to sum sample runs
 sample         = [93338]                     # sample runs (list)
 sample_bg      = 93329                       # single background run
 wv_file        = 'WV_91329.txt'              # white vanadium integral file (mandatory)
-Ei_list        = [3.71,1.035,1.775]          # incident energies (Ei) - from PyChop
+Ei_list        = ['auto']                    # incident energies (Ei) - from PyChop
 Erange         = [-0.8,0.0025,0.8]           # energy transfer range to output in fractions of Ei
 trans          = [0.95,0.95,0.95]            # elastic line transmission factors for each Ei
 mask           = 'MASK_FILE_XML'             # hard mask
@@ -36,13 +38,24 @@ mask           = 'MASK_FILE_XML'             # hard mask
 #  - 'replace': sum and replace first nxspe file created
 #  - 'ignore': ignore and create an nxspe for each run
 #  - 'accumulate': sum all runs with this angle when creating new nxspe
-same_angle_action = 'replace'
+same_angle_action = 'ignore'
+# to enable creating multiple reduced data files from a single
+# "continuous scan" set the following variables to a valid log "block"
+# name and the bin size (width) to something larger than zero.
+# An optional unit can be given.
+# If sumruns=True, the sample list is summed and then divided
+# If sumruns=False and multiple sample runs are listed, an error is raised.
+# This is also only compatible with same_angle_action='ignore'
+cs_block = None
+cs_block_unit = ''
+cs_bin_size = 0
 #========================================================
 
 #==================Absolute Units Inputs=================
 mv_file       = None        # pre-processed MV calibration
 sample_mass   = 1           # mass of the sample
 sample_fwt    = 50.9415     # formula weight of sample
+monovan_mass  = None        # Mass of vanadium sample (ask local contact)
 #========================================================
 
 #==================Local Contact Inputs==================
@@ -60,7 +73,11 @@ idebug = False                  # keep workspaces and check absolute units on el
 save_dir = f'/instrument/{inst}/RBNumber/USER_RB_FOLDER'  # Set to None to avoid reseting
 psi_motor_name = 'rot'          # name of the rotation motor in the logs
 angles_workspace = 'angles_ws'  # name of workspace to store previously seen angles
+sumruns_savemem = False         # Compresses event in summed ws to save memory
+                                # (causes some loss of data so cannot use event filtering)
+cs_smidge = 0.001               # Tolerance on continuous scan bins size
 #========================================================
+#!end_params
 
 # ==============================setup directroties================================
 config['default.instrument'] = inst
@@ -70,23 +87,23 @@ if inst == 'MARI':
     source = 'Moderator'
     m2spec = 2                  # specID of monitor2 (pre-sample)
     m3spec = 3                  # specID of monitor3 (post-sample)
-    monovan_mass = 32.58        # mass of vanadium cylinder
+    #monovan_mass = 32.58       # mass of vanadium cylinder
     same_angle_action = 'ignore'
 elif inst == 'MERLIN':
     source = 'undulator'
     m2spec = 69636              # specID of monitor2 (pre-sample)
     m3spec = 69640              # specID of monitor3 (post-sample)
-    monovan_mass = 32.62        # mass of vanadium cylinder
+    #monovan_mass = 32.62       # mass of vanadium cylinder
 elif inst == 'MAPS':
     source = 'undulator'
-    m2spec = 41475              # specID of monitor2 (pre-sample)
-    m3spec = 41476              # specID of monitor3 (post-sample)
-    monovan_mass = 30.1         # mass of vanadium cylinder
+    m2spec = 36867              # specID of monitor2 (pre-sample)
+    m3spec = 36868              # specID of monitor3 (post-sample)
+    #monovan_mass = 30.1        # mass of vanadium cylinder
 elif inst == 'LET':
     source = 'undulator'
     m2spec = 98310              # specID of monitor2 (pre-sample)
     m3spec = None               # specID of monitor3 (post-sample)
-    monovan_mass = 3.56         # mass of vanadium cylinder
+    #monovan_mass = 3.56        # mass of vanadium cylinder
 else:
     raise RuntimeError(f'Unrecognised instrument: {inst}')
 
@@ -107,6 +124,9 @@ except ImportError:
     utils_loaded = False
     def rename_existing_ws(*a, **k): raise RuntimeError('Unable to load utils')
     def remove_extra_spectra_if_mari(*a, **k): raise RuntimeError('Unable to load utils')
+    def autoei(*a, **k):
+        raise RuntimeError('Cannot use Auto-Ei: ' \
+            'You need to copy the reduction_utils.py file somewhere on the Python path')
 
 #========================================================
 # Helper functions
@@ -121,24 +141,37 @@ def tryload(irun):              # loops till data file appears
             ws = Load(str(irun),LoadMonitors='Separate')
         except ValueError:
             print(f'...waiting for run #{irun}')
-            time.sleep(file_wait)
+            Pause(file_wait)
             continue
         break
     if inst == 'MARI':
         remove_extra_spectra_if_mari('ws')
     return mtd['ws']
 
-def load_sum(run_list):
+def load_sum(run_list, block_name=None):
     for ii, irun in enumerate(run_list):
         tryload(irun)
         if ii == 0:
             w_buf = CloneWorkspace('ws')
             w_buf_monitors = CloneWorkspace('ws_monitors')
+            if block_name:
+                bval = mtd['ws'].getRun().getLogData(block_name).filtered_value
             print(f'run #{irun} loaded')
         else:
             w_buf = Plus('w_buf', 'ws')
             w_buf_monitors = Plus('w_buf_monitors', 'ws_monitors')
+            if block_name:
+                bv2 = mtd['ws'].getRun().getLogData(block_name).filtered_value
+                bval = np.concatenate((bval, bv2))
             print(f'run #{irun} added')
+    ADS.remove('ws')
+    ADS.remove('ws_monitors')
+    wsout_name = lhs_info('names')[0]
+    if wsout_name != 'w_buf':
+        RenameWorkspace('w_buf_monitors', wsout_name+'_monitors')
+        RenameWorkspace('w_buf', wsout_name)
+    return (mtd[wsout_name], bval) if block_name else mtd[wsout_name]
+
 #========================================================
 
 
@@ -170,9 +203,60 @@ if wv_file not in ws_list:
 else:
     print(f'{inst}: Using previously loaded white vanadium - {wv_file}')
 
+# =======================load background runs and sum=========================
+if sample_bg is not None:
+    ws_bg = load_sum(sample_bg)
+
+# ==========================continuous scan stuff=============================
+if cs_block and cs_bin_size > 0:
+    if len(sample) > 1 and not sumruns:
+        raise RuntimeError('Continous scans for multiple (non-summed) files not supported')
+    if same_angle_action.lower() != 'ignore':
+        raise RuntimeError(f'Continous scans not compatible with same_angle_action="{same_angle_action}"')
+    # Sets sumruns false so don't redo the sum below. Instead sum here to get filtered block values.
+    # This is due to a bug in the Mantid "Plus" algorithm, which gives incorrect filtered values
+    # https://github.com/mantidproject/mantid/issues/36194
+    sumruns = False
+    ws_full, bval = load_sum(sample, cs_block)
+    ws_monitors = CloneWorkspace('ws_full_monitors')
+    bval_range = max(bval) - min(bval)
+    bval_nbins = int(bval_range / cs_bin_size)
+    bval_remainder = bval_range - cs_bin_size * bval_nbins
+    # Overrides the sample list in order to hijack the loop over run numbers below
+    irun_orig = sample[0]
+    sample = [x*cs_bin_size + min(bval) for x in range(bval_nbins)]
+    unit = cs_block_unit
+    if not unit:
+        unit = ws_full.getRun().getLogData(cs_block).units
+    print(f'{cs_block} = {min(bval):.1f} {unit} to {max(bval):.1f} {unit}')
+    print(f'... filtering in {cs_bin_size:.1f} {unit} steps')
+    print(f'... N={bval_nbins} bins with {bval_remainder:.2f} {unit} remainder')
+
+# =======================sum sample runs if required=========================
+sumsuf = sumruns and len(sample) > 1
+if sumruns:
+    ws = load_sum(sample)
+    sample = [sample[0]]
+
+is_auto = lambda x: isinstance(x, str) and 'auto' in x.lower()
+if is_auto(Ei_list) or hasattr(Ei_list, '__iter__') and is_auto(Ei_list[0]):
+    try:
+        Ei_list = autoei(ws)
+    except NameError:
+        fn = str(sample[0])
+        if not fn.startswith(inst[:3]): fn = f'{inst[:3]}{fn}'
+        if fn.endswith('.raw'): fn = fn[:-4]
+        if not fn.endswith('.nxs'): fn += '.nxs'
+        Ei_list = autoei(LoadNexusMonitors(fn, OutputWorkspace='ws_tmp_mons'))
+    print(f"Automatically determined Ei's: {Ei_list}")
+    if len(trans) < len(Ei_list):
+        print(f'{inst}: WARNING - not enough transmision values for auto-Ei. ' \
+              'Extending list with last (end) value')
+        trans += [trans[-1]]*(len(Ei_list) - len(trans))
+
 # ===============================load monovan file===============================
 mv_fac = []
-if mv_file is not None:
+if mv_file is not None and monovan_mass is not None:
     if mv_file not in ws_list:
         print(f'{inst}: Loading monovan calibration factors - {mv_file}')
         LoadAscii(mv_file,OutputWorkspace=mv_file)
@@ -182,7 +266,7 @@ if mv_file is not None:
 # check that monovan is compatible with Ei_list)
     Ei_diff = sum([x-y for x,y in zip(mv_eis,Ei_list)])
     if (abs(Ei_diff) > 0):
-        print('----ERROR: Monovan file Eis not compatible with Ei_list')
+        raise RuntimeError('----ERROR: Monovan file Eis not compatible with Ei_list')
     for Ei in Ei_list:
         ii = np.where(mv_eis == Ei)
         mvf = mv_cal[ii][0]
@@ -193,19 +277,6 @@ if mv_file is not None:
 else:
     print(f'{inst}: Skipping absolute calibration')
     mv_fac = [x/x for x in Ei_list]     # monovan factors = 1 by default
-
-# =======================load background runs and sum=========================
-if sample_bg is not None:
-    load_sum(sample_bg)
-    ws_bg = CloneWorkspace('w_buf')
-    ws_bg = NormaliseByCurrent('ws_bg')
-
-# =======================sum sample runs if required=========================
-if sumruns:
-    load_sum(sample)
-    ws = CloneWorkspace('w_buf')
-    ws_monitors = CloneWorkspace('w_buf_monitors')
-    sample = [sample[0]]
 
 # =====================angles cache stuff====================================
 if utils_loaded:
@@ -225,24 +296,39 @@ for irun in sample:
         for ss in nx_list:
             ADS.remove(ss)
 
+    # For continuous scans generate the workspace based on binned log values
+    # NB. we replaced the sample (run) list with list of block min bin boundaries
+    if cs_block and cs_bin_size > 0:
+        val = round(irun + cs_bin_size/2,1)
+        print(f"Filtering: {cs_block}={val:.1f} ± {round(cs_bin_size/2,2):.2f} {unit}")
+        ws = FilterByLogValue(ws_full, cs_block, irun, irun + cs_bin_size - cs_smidge)
+
     # if this run is at an angle already seen and we are doing 'replace', skip
     if same_angle_action.lower() != 'ignore' and irun in runs_with_angles_already_seen:
         continue
 
     print('============')
-    if not sumruns:
+    if not sumruns and not cs_block:
         # Checks rotation angle
         if same_angle_action.lower() != 'ignore':
             runs_with_same_angles = get_angle(irun, angles_workspace, psi_motor_name, tryload)
             if len(runs_with_same_angles) > 1:
-                load_sum(runs_with_same_angles)
+                ws = load_sum(runs_with_same_angles)
                 if same_angle_action.lower() == 'replace':
                     irun = runs_with_same_angles[0]
                     runs_with_angles_already_seen += runs_with_same_angles
         else:
             tryload(irun)
             print(f'Loading run# {irun}')
+
     ws = NormaliseByCurrent('ws')
+    if sumruns and sumruns_savemem:
+        ws = CompressEvents(ws, Tolerance=1e-5)  # Tolerance in microseconds
+
+    # instrument geometry to work out ToF ranges
+    sampos = ws.getInstrument().getSample().getPos()
+    l1 = (sampos - ws.getInstrument().getSource().getPos()).norm()
+    l2 = (ws.getDetector(0).getPos() - sampos).norm()
 
 # ============================= Ei loop =====================================
     for ienergy in range(len(Ei_list)):
@@ -252,15 +338,24 @@ for irun in sample:
         mvf = mv_fac[ienergy]
         print(f'\n{inst}: Reducing data for Ei={Ei:.2f} meV')
 
-        ws_corrected = Scale('ws', 1 / tr, 'Multiply')
+        # Low energy reps on MARI end up in the second frame
+        t_shift = 20000 if inst == 'MARI' and origEi < 3.1 else 0
+
+        tofs = ws.readX(0)
+        tof_min = np.sqrt(l1**2 * 5.227e6 / Ei) - t_shift
+        tof_max = tof_min + np.sqrt(l2**2 * 5.226e6 / (Ei*(1-Erange[-1])))
+        ws_rep = CropWorkspace(ws, max(min(tofs), tof_min), min(max(tofs), tof_max))
+
         if sample_bg is not None:
             print(f'... subtracting background - transmission factor = {tr:.2f}')
-            ws_corrected  = ws/tr - ws_bg
+            ws_rep  = ws_rep/tr - ws_bg
+        else:
+            ws_rep = Scale('ws_rep', 1 / tr, 'Multiply')
 
         # normalise to WB vanadium and apply fixed mask
         print('... normalising/masking data')
-        ws_norm = Divide('ws_corrected', wv_file)       # white beam normalisation
-        MaskDetectors(ws_norm,MaskedWorkspace=mask,ForceInstrumentMasking=True)
+        ws_rep = Divide('ws_rep', wv_file)       # white beam normalisation
+        MaskDetectors(ws_rep, MaskedWorkspace=mask, ForceInstrumentMasking=True)
 
         # t2e section
         print('... t2e section')
@@ -271,46 +366,59 @@ for irun in sample:
 
         if inst == 'MARI' and utils_loaded and origEi < 4.01:
             # Shifts data / monitors into second frame for MARI
-            ws_norm, ws_monitors = shift_frame_for_mari_lowE(origEi, wsname='ws_norm', wsmon='ws_monitors')
+            ws_rep, ws_monitors = shift_frame_for_mari_lowE(origEi, wsname='ws_rep', wsmon='ws_monitors')
 
         # this section shifts the time-of-flight such that the monitor2 peak
         # in the current monitor workspace (post monochromator) is at t=0 and L=0
         # note that the offest is not the predicted value due to energy dependence of the source position
 
-        if m3spec is not None and not fixei:
-            (Ei,mon2_peak,_,_) = GetEi(ws_monitors,Monitor1Spec=m2spec,Monitor2Spec=m3spec,EnergyEstimate=Ei)
+        if m3spec is not None:
+            (Ei,mon2_peak,_,_) = GetEi(ws_monitors,Monitor1Spec=m2spec,Monitor2Spec=m3spec,EnergyEstimate=Ei,FixEi=fixei)
             print(f'... refined Ei={Ei:.2f} meV')
         else:
             (Ei,mon2_peak,_,_) = GetEi(ws_monitors,Monitor2Spec=m2spec,EnergyEstimate=Ei,FixEi=fixei)
 
         print(f'... m2 tof={mon2_peak:.2f} mus, m2 pos={m2pos:.2f} m')
 
-        ws_norm = ScaleX(ws_norm, Factor=-mon2_peak, Operation='Add', InstrumentParameter='DelayTime', Combine=True)
-        MoveInstrumentComponent(ws_norm, ComponentName=source, Z=m2pos, RelativePosition=False)
+        ws_rep = ScaleX(ws_rep, Factor=-mon2_peak, Operation='Add', InstrumentParameter='DelayTime', Combine=True)
+        MoveInstrumentComponent(ws_rep, ComponentName=source, Z=m2pos, RelativePosition=False)
 
-        ws_out = ConvertUnits(ws_norm, 'DeltaE', EMode='Direct', EFixed=Ei)
-        ws_out = Rebin(ws_out, [x*Ei for x in Erange], PreserveEvents=False)
+        ws_rep = ConvertUnits(ws_rep, 'DeltaE', EMode='Direct', EFixed=Ei)
+        ws_out = Rebin(ws_rep, [x*origEi for x in Erange], PreserveEvents=False)
         ws_out = DetectorEfficiencyCor(ws_out, IncidentEnergy=Ei)
         ws_out = CorrectKiKf(ws_out, Efixed=Ei, EMode='Direct')
+        ADS.remove('ws_rep')
 
         # monovan scaling
         if mv_file is not None:
             print(f'... applying mono van calibration factor {mvf:.1f}')
         ws_out = Scale('ws_out', mvf, 'Multiply')
 
+        # Sets output file name
+        if cs_block and cs_bin_size > 0:
+            ofile_prefix = f'{inst[:3]}{irun_orig}'
+            ofile_suffix = f"_{val:.1f}{unit}"
+        else:
+            ofile_prefix = f'{inst[:3]}{irun}'
+            ofile_suffix = ''
+
         # rings grouping if desired
-        ofile_suffix='_1to1'
         if powder or inst == 'MARI' or QENS:
             ws_out=GroupDetectors(ws_out, MapFile=powdermap, Behaviour='Average')
-            ofile_suffix = '_powder'
+            ofile_suffix += '_powder'
             if inst == 'MARI' or QENS:
                 ofile_suffix = ''
             print(f'... powder grouping using {powdermap}')
-        if sample_bg is not None and inst == 'MARI':
-            ofile_suffix += '_sub'
+        else:
+            ofile_suffix += '_1to1'
+        if inst == 'MARI':
+            if sumsuf:
+                ofile_suffix += 'sum'
+            if sample_bg is not None:
+                ofile_suffix += '_sub'
 
         # output nxspe file
-        ofile = f'{inst[:3]}{irun}_{origEi:g}meV{ofile_suffix}'
+        ofile = f'{ofile_prefix}_{origEi:g}meV{ofile_suffix}'
 
         # check elastic line (debug mode)
         if idebug:
@@ -324,10 +432,12 @@ for irun in sample:
         print(f'{inst}: Writing {ofile}{saveformat}')
         if saveformat.lower() == '.nxspe':
             SaveNXSPE('ws_out', ofile+saveformat, Efixed=Ei, KiOverKfScaling=True)
-            if utils_loaded:
-                copy_inst_info(ofile+saveformat, 'ws_out')   # Copies instrument info for Horace
+            #if utils_loaded and not powder:
+            #    copy_inst_info(ofile+saveformat, 'ws_out')   # Copies instrument info for Horace
         elif saveformat.lower() == '.nxs':
-            SaveNexus('ws_out', ofile+saveformat)
+            rmlogs = {'events_log', 'frame_log', 'good_frame_log', 'period_log', 'proton_charge', 'raw_events_log'}
+            RemoveLogs('ws_out', KeepLogs=','.join(set(mtd['ws_out'].run().keys()).difference(rmlogs)))
+            SaveNexusProcessed('ws_out', ofile+saveformat, PreserveEvents=False, CompressNexus=True)
         if QENS:
             print('... outputting QENS "_red" format')
             theta = np.array([theta_range[0], theta_range[1]])*np.pi/180.
