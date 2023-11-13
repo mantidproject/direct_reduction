@@ -51,7 +51,7 @@ cs_block = None
 cs_block_unit = ''
 cs_bin_size = 0
 # MARI only: used to subtract an analytic approx of instrument background
-sub_ana = True
+sub_ana = False
 #========================================================
 
 #==================Absolute Units Inputs=================
@@ -149,6 +149,18 @@ def tryload(irun):              # loops till data file appears
         break
     if inst == 'MARI':
         remove_extra_spectra_if_mari('ws')
+        if sub_ana is True and not sample_cd:
+            if 'bkg_ev' not in mtd:
+                gen_ana_bkg()
+            current = mtd['ws'].run().getProtonCharge()
+            if isinstance(mtd['ws'], mantid.dataobjects.EventWorkspace):
+                ws = mtd['ws'] - mtd['bkg_ev'] * current
+            else:
+                try:
+                    ws = mtd['ws'] - mtd['bkg_his'] * current
+                except ValueError:
+                    gen_ana_bkg(target_ws=mtd['ws'])
+                    ws = mtd['ws'] - mtd['bkg_his'] * current
     return mtd['ws']
 
 def load_sum(run_list, block_name=None):
@@ -430,6 +442,8 @@ for irun in sample:
                 ofile_suffix += 'sum'
             if sample_bg is not None:
                 ofile_suffix += '_sub'
+            if sub_ana:
+                ofile_suffix += '_sa'
 
         # output nxspe file
         ofile = f'{ofile_prefix}_{origEi:g}meV{ofile_suffix}'
