@@ -29,6 +29,7 @@ powder         = True                        # powder or 1to1 map
 sumruns        = False                       # set to True to sum sample runs
 sample         = [93338]                     # sample runs (list)
 sample_bg      = 93329                       # single background run
+sample_cd      = None                        # Cadmium run for instrument background subtraction
 wv_file        = 'WV_91329.txt'              # white vanadium integral file (mandatory)
 Ei_list        = ['auto']                    # incident energies (Ei) - from PyChop
 Erange         = [-0.8,0.0025,0.8]           # energy transfer range to output in fractions of Ei
@@ -49,6 +50,8 @@ same_angle_action = 'ignore'
 cs_block = None
 cs_block_unit = ''
 cs_bin_size = 0
+# MARI only: used to subtract an analytic approx of instrument background
+sub_ana = True
 #========================================================
 
 #==================Absolute Units Inputs=================
@@ -183,6 +186,8 @@ if isinstance(sample, str) or not hasattr(sample, '__iter__'):
     sample = [sample]
 if sample_bg is not None and (isinstance(sample_bg, str) or not hasattr(sample_bg, '__iter__')):
     sample_bg = [sample_bg]
+if sample_cd is not None and (isinstance(sample_cd, str) or not hasattr(sample_cd, '__iter__')):
+    sample_cd = [sample_cd]
 
 #==================================load hard mask================================
 if mask is None:
@@ -204,8 +209,12 @@ else:
     print(f'{inst}: Using previously loaded white vanadium - {wv_file}')
 
 # =======================load background runs and sum=========================
+if sample_cd is not None:
+    ws_cd = load_sum(sample_cd)
 if sample_bg is not None:
     ws_bg = load_sum(sample_bg)
+    if sample_cd is not None:
+        ws_bg = ws_bg - ws_cd
 
 # ==========================continuous scan stuff=============================
 if cs_block and cs_bin_size > 0:
@@ -238,6 +247,7 @@ if sumruns:
     ws = load_sum(sample)
     sample = [sample[0]]
 
+# =============================auto-Ei stuff=================================
 is_auto = lambda x: isinstance(x, str) and 'auto' in x.lower()
 if is_auto(Ei_list) or hasattr(Ei_list, '__iter__') and is_auto(Ei_list[0]):
     try:
@@ -254,7 +264,7 @@ if is_auto(Ei_list) or hasattr(Ei_list, '__iter__') and is_auto(Ei_list[0]):
               'Extending list with last (end) value')
         trans += [trans[-1]]*(len(Ei_list) - len(trans))
 
-# ===============================load monovan file===============================
+# ============================load monovan file==============================
 mv_fac = []
 if mv_file is not None and monovan_mass is not None:
     if mv_file not in ws_list:
@@ -345,6 +355,10 @@ for irun in sample:
         tof_min = np.sqrt(l1**2 * 5.227e6 / Ei) - t_shift
         tof_max = tof_min + np.sqrt(l2**2 * 5.226e6 / (Ei*(1-Erange[-1])))
         ws_rep = CropWorkspace(ws, max(min(tofs), tof_min), min(max(tofs), tof_max))
+
+        if sample_cd is not None:
+            print(f'... subtracting Cd background')
+            ws_rep = ws_rep - ws_cd
 
         if sample_bg is not None:
             print(f'... subtracting background - transmission factor = {tr:.2f}')
