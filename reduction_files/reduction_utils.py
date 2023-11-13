@@ -6,6 +6,7 @@ import json
 import warnings
 import importlib
 import types
+import scipy.optimize
 from os.path import abspath, dirname
 from mantid.kernel.funcinspect import lhs_info
 
@@ -141,14 +142,18 @@ def copy_inst_info(outfile, in_ws):
 
 def remove_extra_spectra_if_mari(wsname='ws'):
     ws = mtd[wsname]
-    if ws.getNumberHistograms() > 918:
-        ws = RemoveSpectra(ws, [0])
-    try:
-        ws_mon = ws.getMonitorWorkspace()
-    except RuntimeError:
-        ws_mon = mtd[f'{wsname}_monitors']
-    if ws_mon.getNumberHistograms() > 3:
-        ws_monitors = RemoveSpectra(ws_mon, [3])
+    if ws.getNumberHistograms() == 919:
+        RemoveSpectra(ws, [0], OutputWorkspace=wsname)
+        try:
+            ws_mon = ws.getMonitorWorkspace()
+        except RuntimeError:
+            try:
+                ws_mon = mtd[f'{wsname}_monitors']
+            except KeyError:
+                ws_mon = None
+        if ws_mon:
+            if ws_mon.getNumberHistograms() > 3:
+                RemoveSpectra(ws_mon, [3], OutputWorkspace=ws_mon.name())
 
 def shift_frame_for_mari_lowE(origEi, wsname='ws_norm', wsmon='ws_monitors'):
     ws_norm, ws_monitors = (mtd[wsname], mtd[wsmon])
@@ -160,6 +165,49 @@ def shift_frame_for_mari_lowE(origEi, wsname='ws_norm', wsmon='ws_monitors'):
             # Additionally if Ei<3.1, data will also be in 2nd frame, shift all ToF by 20ms
             ws_norm = ScaleX(wsname, 20000, Operation='Add', IndexMin=0, IndexMax=ws_norm.getNumberHistograms()-1, OutputWorkspace=ws_out)
     return ws_norm, ws_monitors
+
+def gen_ana_bkg(quietws='MAR28952', target_ws=None):
+    # Generates an analytic background workspace from the quiet counts data
+    # by fitting each spectra with a decaying exponential a*exp(-b*ToF)
+    if quietws not in mtd:
+        Load(Filename=f'{quietws}.nxs', OutputWorkspace=quietws)
+        remove_extra_spectra_if_mari(quietws)
+        NormaliseByCurrent(InputWorkspace=quietws, OutputWorkspace=quietws)
+    bw, bx = (100, 1)
+    ws = mtd[quietws]
+    if target_ws:
+        wx = RebinToWorkspace(ws, target_ws, PreserveEvents=False, OutputWorkspace='bkg_his')
+    else:
+        wx = Rebin(ws, f'1700,{bx},19000', PreserveEvents=False, OutputWorkspace='bkg_his')
+    ws = Rebin(ws, f'1700,{bw},19000', OutputWorkspace='ws_ana_tmp')
+    current = ws.run().getProtonCharge()
+    xx = ws.extractX(); xx = (xx[:, 1:] + xx[:, :-1]) / 2.
+    yy = ws.extractY()
+    def fitfu(x, *pars):
+        return pars[0] * np.exp(-x * pars[1])
+    fdi = {}
+    for spn in range(yy.shape[0]):
+        if np.max(yy[spn,:]) > (0.002):
+            popt, _ = scipy.optimize.curve_fit(fitfu, xx[spn,:], yy[spn,:], p0=[6e-4, 1./4000.])
+            popt[0] /= bw
+            fdi[spn] = popt
+            x1 = wx.readX(spn)
+            y1 = fitfu((x1[1:] + x1[:-1]) / 2., *popt)
+            wx.setY(spn, y1)
+            wx.setE(spn, np.sqrt(y1*bw*current) / (bw*current))
+        else:
+            wx.setY(spn, wx.readY(spn)*0)
+            wx.setE(spn, wx.readY(spn)*0)
+    if '28952' in quietws:
+        for spn in range(697 - 4, 759 - 4):
+            bb = spn - 259
+            if bb in fdi.keys():
+                x1 = wx.readX(bb)
+                y1 = fitfu((x1[1:] + x1[:-1]) / 2., *fdi[bb])
+                wx.setY(spn, y1)
+                wx.setE(spn, np.sqrt(y1*bw*current) / (bw*current))
+    bkg_ev = ConvertToEventWorkspace(wx)
+    return bkg_ev, wx
 
 #========================================================
 # Auto-Ei routine
@@ -363,10 +411,10 @@ class DG_reduction_wrapper:
         for ky, val in self.subsdict.items():
             src = re.sub(ky, val, src)
         x0, x1 = (src.find('#!begin_params'), src.find('#!end_params'))
-        src_body = (src[:x0] + src[x1:]).encode()
+        src_param = src[x0:x1]
+        src_body = (src[:x0] + re.sub('\n', '\n#', src_param) + src[x1:]).encode()
         code = loader.source_to_code(src_body, filename)
         # Parses the variables section
-        src_param = src[x0:x1]
         tmp_mod = types.ModuleType('dgredwrapper_param')
         exec(src_param, tmp_mod.__dict__)
         params = {k:getattr(tmp_mod, k) for k in dir(tmp_mod) if not k.startswith('_')}
