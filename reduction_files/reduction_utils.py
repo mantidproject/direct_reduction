@@ -408,8 +408,9 @@ class DG_reduction_wrapper:
         loader = importlib.machinery.SourceFileLoader('<dgredwrapper>', filename)
         # Loads the main reduction script and compiles it to bytecode
         src = loader.get_data(filename).decode()
-        for ky, val in self.subsdict.items():
-            src = re.sub(ky, val, src)
+        if 'INSTRUMENT_NAME' in src:
+            for ky, val in self.subsdict.items():
+                src = re.sub(ky, val, src)
         x0, x1 = (src.find('#!begin_params'), src.find('#!end_params'))
         src_param = src[x0:x1]
         src_body = (src[:x0] + re.sub('\n', '\n#', src_param) + src[x1:]).encode()
@@ -452,6 +453,7 @@ def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=
         wv_args = {'inst':kwargs['inst']}
     try:
         LoadAscii(wv_file, OutputWorkspace=wv_file)
+        ReplaceSpecialValues(wv_file, SmallNumberThreshold=1e-20, SmallNumberValue='NaN', OutputWorkspace=wv_file)
     except ValueError:
         run_whitevan(whitevan=wbvan, **wv_args)
     Ei_list = ei if hasattr(ei, '__iter__') else [ei]
