@@ -472,8 +472,8 @@ for irun in sample:
         print(f'{inst}: Writing {ofile}{saveformat}')
         if saveformat.lower() == '.nxspe':
             SaveNXSPE('ws_out', ofile+saveformat, Efixed=Ei, KiOverKfScaling=True)
-            #if utils_loaded and not powder:
-            #    copy_inst_info(ofile+saveformat, 'ws_out')   # Copies instrument info for Horace
+            if utils_loaded:
+                copy_inst_info(ofile+saveformat, 'ws_out')   # Copies instrument info for Horace
         elif saveformat.lower() == '.nxs':
             rmlogs = {'events_log', 'frame_log', 'good_frame_log', 'period_log', 'proton_charge', 'raw_events_log'}
             RemoveLogs('ws_out', KeepLogs=','.join(set(mtd['ws_out'].run().keys()).difference(rmlogs)))
