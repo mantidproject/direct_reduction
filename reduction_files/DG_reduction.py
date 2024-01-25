@@ -38,7 +38,6 @@ mask           = 'MASK_FILE_XML'             # hard mask
 # what to do if see run with same angle as previous run (and sumruns==False)
 #  - 'replace': sum and replace first nxspe file created
 #  - 'ignore': ignore and create an nxspe for each run
-#  - 'accumulate': sum all runs with this angle when creating new nxspe
 same_angle_action = 'ignore'
 # to enable creating multiple reduced data files from a single
 # "continuous scan" set the following variables to a valid log "block"
@@ -342,9 +341,8 @@ for irun in sample:
             runs_with_same_angles = get_angle(irun, angles_workspace, psi_motor_name, tryload)
             if len(runs_with_same_angles) > 1:
                 ws = load_sum(runs_with_same_angles)
-                if same_angle_action.lower() == 'replace':
-                    irun = runs_with_same_angles[0]
-                    runs_with_angles_already_seen += runs_with_same_angles
+                irun = runs_with_same_angles[0]
+                runs_with_angles_already_seen += runs_with_same_angles
         else:
             tryload(irun)
             print(f'Loading run# {irun}')
