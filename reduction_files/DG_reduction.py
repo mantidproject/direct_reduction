@@ -38,7 +38,6 @@ mask           = 'MASK_FILE_XML'             # hard mask
 # what to do if see run with same angle as previous run (and sumruns==False)
 #  - 'replace': sum and replace first nxspe file created
 #  - 'ignore': ignore and create an nxspe for each run
-#  - 'accumulate': sum all runs with this angle when creating new nxspe
 same_angle_action = 'ignore'
 # to enable creating multiple reduced data files from a single
 # "continuous scan" set the following variables to a valid log "block"
@@ -67,7 +66,7 @@ cycle = 'CYCLE_ID'              # cycle number
 fixei = True                    # True for LET since no monitor 3
 powdermap = 'RINGS_MAP_XML'     # rings mapping file - must be .xml format
 file_wait = 30                  # wait for data file to appear (seconds)
-keepworkspaces = True           # should be false for Horace scans
+keepworkspaces = False          # should be false for Horace scans
 saveformat = '.nxspe'           # format of output, '.nxspe', '.nxs'
 QENS = False                    # output Q-binned data for QENS data analysis '_red.nxs'
 Qbins = 20                      # approximate number of Q-bins for QENS
@@ -227,6 +226,7 @@ if sample_bg is not None:
     ws_bg = load_sum(sample_bg)
     if sample_cd is not None:
         ws_bg = ws_bg - ws_cd
+    ws_bg = NormaliseByCurrent(ws_bg)
 
 # ==========================continuous scan stuff=============================
 if cs_block and cs_bin_size > 0:
@@ -262,23 +262,28 @@ if sumruns:
 # =============================auto-Ei stuff=================================
 is_auto = lambda x: isinstance(x, str) and 'auto' in x.lower()
 if is_auto(Ei_list) or hasattr(Ei_list, '__iter__') and is_auto(Ei_list[0]):
+    use_auto_ei = True
     try:
         Ei_list = autoei(ws)
     except NameError:
         fn = str(sample[0])
         if not fn.startswith(inst[:3]): fn = f'{inst[:3]}{fn}'
         if fn.endswith('.raw'): fn = fn[:-4]
-        if not fn.endswith('.nxs'): fn += '.nxs'
+        if fn[-4:-2] == '.s': fn = fn[:-4] + '.n0' + fn[-2:]
+        if not fn.endswith('.nxs') and fn[-5:-2] != '.n0': fn += '.nxs'
         Ei_list = autoei(LoadNexusMonitors(fn, OutputWorkspace='ws_tmp_mons'))
     print(f"Automatically determined Ei's: {Ei_list}")
     if len(trans) < len(Ei_list):
         print(f'{inst}: WARNING - not enough transmision values for auto-Ei. ' \
               'Extending list with last (end) value')
         trans += [trans[-1]]*(len(Ei_list) - len(trans))
+else:
+    use_auto_ei = False
 
 # ============================load monovan file==============================
 mv_fac = []
 if mv_file is not None and monovan_mass is not None:
+    use_auto_ei = False
     if mv_file not in ws_list:
         print(f'{inst}: Loading monovan calibration factors - {mv_file}')
         LoadAscii(mv_file,OutputWorkspace=mv_file)
@@ -336,9 +341,8 @@ for irun in sample:
             runs_with_same_angles = get_angle(irun, angles_workspace, psi_motor_name, tryload)
             if len(runs_with_same_angles) > 1:
                 ws = load_sum(runs_with_same_angles)
-                if same_angle_action.lower() == 'replace':
-                    irun = runs_with_same_angles[0]
-                    runs_with_angles_already_seen += runs_with_same_angles
+                irun = runs_with_same_angles[0]
+                runs_with_angles_already_seen += runs_with_same_angles
         else:
             tryload(irun)
             print(f'Loading run# {irun}')
@@ -351,6 +355,12 @@ for irun in sample:
     sampos = ws.getInstrument().getSample().getPos()
     l1 = (sampos - ws.getInstrument().getSource().getPos()).norm()
     l2 = (ws.getDetector(0).getPos() - sampos).norm()
+
+    # Updates ei_loop if auto _and_ not using monovan
+    if use_auto_ei:
+        Ei_list = autoei(ws)
+        if len(trans) < len(Ei_list): trans += [trans[-1]]*(len(Ei_list) - len(trans))
+        if len(mv_fac) < len(Ei_list): mv_fac += [1]*(len(Ei_list) - len(mv_fac))
 
 # ============================= Ei loop =====================================
     for ienergy in range(len(Ei_list)):
@@ -460,8 +470,8 @@ for irun in sample:
         print(f'{inst}: Writing {ofile}{saveformat}')
         if saveformat.lower() == '.nxspe':
             SaveNXSPE('ws_out', ofile+saveformat, Efixed=Ei, KiOverKfScaling=True)
-            #if utils_loaded and not powder:
-            #    copy_inst_info(ofile+saveformat, 'ws_out')   # Copies instrument info for Horace
+            if utils_loaded:
+                copy_inst_info(ofile+saveformat, 'ws_out')   # Copies instrument info for Horace
         elif saveformat.lower() == '.nxs':
             rmlogs = {'events_log', 'frame_log', 'good_frame_log', 'period_log', 'proton_charge', 'raw_events_log'}
             RemoveLogs('ws_out', KeepLogs=','.join(set(mtd['ws_out'].run().keys()).difference(rmlogs)))

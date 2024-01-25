@@ -101,41 +101,55 @@ def get_raw_file_from_ws(ws):
                 return prp.value()
     raise RuntimeError('Could not find raw NeXus file in workspace history')
 
+
 def copy_inst_info(outfile, in_ws):
+    print(f'Copying Instrument Info to file {outfile}')
     try:
         raw_file_name = get_raw_file_from_ws(mtd[in_ws])
     except RuntimeError:
         return
-    print(raw_file_name)
     if not os.path.exists(outfile):
         outfile = os.path.join(mantid.simpleapi.config['defaultsave.directory'], os.path.basename(outfile))
-    print(outfile)
     with h5py.File(raw_file_name, 'r') as raw:
         exclude = ['dae', 'detector_1', 'name']
         to_copy = [k for k in raw['/raw_data_1/instrument'] if not any([x in k for x in exclude])]
         if 'aperture' not in to_copy and 'mono_chopper' not in to_copy:
             return
+        n_spec = len(raw['/raw_data_1/instrument/detector_1/spectrum_index'])
         with h5py.File(outfile, 'r+') as spe:
-            print(spe.keys())
             spe_root = list(spe.keys())[0]
             en0 = spe[f'{spe_root}/instrument/fermi/energy'][()]
             if 'fermi' in to_copy:
                 del spe[f'{spe_root}/instrument/fermi']
             for grp in to_copy:
-                print(grp)
                 src = raw[f'/raw_data_1/instrument/{grp}']
                 h5py.Group.copy(src, src, spe[f'{spe_root}/instrument/'])
             if 'fermi' in to_copy:
                 spe[f'{spe_root}/instrument/fermi/energy'][()] = en0
             detroot = f'{spe_root}/instrument/detector_elements_1'
             spe.create_group(detroot)
+            spe[detroot].attrs['NX_class'] = np.array('NXdetector', dtype='S')
             for df0, df1 in zip(['SPEC', 'UDET', 'DELT', 'LEN2', 'CODE', 'TTHE', 'UT01'], \
-                ['spectrum_number', 'detector_number', 'delt', 'distance', 'detector_code', 'polar_angle', 'azimuthal_angle']):
+                ['det2spec', 'detector_number', 'delt', 'distance', 'detector_code', 'polar_angle', 'azimuthal_angle']):
                 src = raw[f'/raw_data_1/isis_vms_compat/{df0}']
                 h5py.Group.copy(src, src, spe[detroot], df1)
             for nn in range(raw['/raw_data_1/isis_vms_compat/NUSE'][0]):
                 src = raw[f'/raw_data_1/isis_vms_compat/UT{nn+1:02d}']
                 h5py.Group.copy(src, src, spe[detroot], f'user_table{nn+1:02d}')
+            spec2work = f'{spe_root}/instrument/detector_elements_1/spec2work'
+            ws = mtd[in_ws]
+            if n_spec == ws.getNumberHistograms():
+                s2w = np.arange(n_spec)
+            else:
+                nmon = np.array(raw['/raw_data_1/isis_vms_compat/NMON'])[0]
+                spec = np.array(raw['/raw_data_1/isis_vms_compat/SPEC'])[nmon:]
+                udet = np.array(raw['/raw_data_1/isis_vms_compat/UDET'])[nmon:]
+                _, iq = np.unique(spec, return_index=True)
+                s2 = np.hstack([np.array(ws.getSpectrum(ii).getDetectorIDs()) for ii in range(ws.getNumberHistograms())])
+                _, c1, _ = np.intersect1d(udet[iq], s2, return_indices=True)
+                s2w = -np.ones(iq.shape, dtype=np.int32)
+                s2w[c1] = np.array(ws.getIndicesFromDetectorIDs(s2[c1].tolist()))
+            spe[detroot].create_dataset('spec2work', s2w.shape, dtype='i4', data=s2w)
 
 #========================================================
 # MARI specific functions
@@ -302,12 +316,15 @@ def autoei(ws):
             freq = mode(getLog('Fermi_Speed'))
         except ValueError:
             return []
-        ei_nominal = mode(getLog('Ei_nominal'))
         phase1, phase2 = (mode(getLog(nam)) for nam in ['Phase_Thick_1', 'Phase_Thick_2'])
         delay = getfracLog('Fermi_delay')
-        sqrt_ei = np.sqrt(ei_nominal)
         lmc = 10.04   # Moderator-Fermi distance
         period = 1.e6 / freq
+        try:
+            ei_nominal = mode(getLog('Ei_nominal'))
+        except RuntimeError:  # Old file
+            ei_nominal = ((2286.26 * lmc) / delay)**2
+        sqrt_ei = np.sqrt(ei_nominal)
         delay_calc = ((2286.26 * lmc) / sqrt_ei)
         t_offset_ref = {'S':2033.3/freq-5.4, 'G':1339.9/freq-7.3}
         t_offset = delay - (delay_calc % period)
