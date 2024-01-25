@@ -5,6 +5,7 @@ import os, sys, re
 import mantid.simpleapi as s_api
 from os.path import abspath, dirname
 from mantid.simpleapi import LoadNexusProcessed
+from numpy.testing import assert_allclose
 
 class DGReductionTest(unittest.TestCase):
 
@@ -34,6 +35,19 @@ class DGReductionTest(unittest.TestCase):
             f.write(ftxt)
 
 
+    @staticmethod
+    def load_return_sum(filename):
+        if isinstance(filename, str):
+            if 'nxspe' in filename:
+                ws = s_api.LoadNXSPE(filename)
+            else:
+                ws = s_api.LoadNexusProcessed(filename)
+        else:
+            ws = filename
+        ei = ws.getEFixed(ws.getDetector(0).getID())
+        wsi = s_api.Integration(ws, -ei/5, ei/5)
+        return [np.nansum(ws.extractY()), np.nansum(wsi.extractY())]
+
     #@classmethod
     #def tearDownClass(cls):
     #    # Removes all generated files
@@ -62,11 +76,12 @@ class DGReductionTest(unittest.TestCase):
         outfile = os.path.join(self.outputpath, 'mari_reduction.py')
         self.substitute_file(infile, outfile, subsdict)
         import mari_reduction
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28581_180meV.nxspe')))
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28581_29.8meV.nxspe')))
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28581_11.7meV.nxspe')))
-        #Load automatically calls `LoadNeXus` first which chokes on the file...
-        #ws = s_api.Load(os.path.join(self.outputpath, 'MAR28581_180meV.nxspe'))
+        cksum = {}
+        for ff in ['MAR28581_180meV.nxspe', 'MAR28581_29.8meV.nxspe', 'MAR28581_11.7meV.nxspe']:
+            cksum[ff] = self.load_return_sum(os.path.join(self.outputpath, ff))
+        assert_allclose(cksum['MAR28581_180meV.nxspe'], [2875.206344581399, 1142.3423609297706])
+        assert_allclose(cksum['MAR28581_29.8meV.nxspe'], [9883.796577551771, 699.569446722105])
+        assert_allclose(cksum['MAR28581_11.7meV.nxspe'], [7579.20214842476, 215.5181898957152])
 
 
     def test_MARI_multiple_lowE(self):
@@ -85,8 +100,11 @@ class DGReductionTest(unittest.TestCase):
         outfile = os.path.join(self.outputpath, 'mari_reduction_lowE.py')
         self.substitute_file(infile, outfile, subsdict)
         import mari_reduction_lowE
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28727_1.84meV.nxspe')))
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAR28727_1.1meV.nxspe')))
+        cksum = {}
+        for ff in ['MAR28727_1.84meV.nxspe', 'MAR28727_1.1meV.nxspe']:
+            cksum[ff] = self.load_return_sum(os.path.join(self.outputpath, ff))
+        assert_allclose(cksum['MAR28727_1.84meV.nxspe'], [163870.34277088975, 630.7098856273342])
+        assert_allclose(cksum['MAR28727_1.1meV.nxspe'], [21173.386235858427, 54.68185719767952])
 
 
     def test_existing_workspace(self):
@@ -107,8 +125,11 @@ class DGReductionTest(unittest.TestCase):
         outfile = os.path.join(self.outputpath, 'mari_reduction_existing.py')
         self.substitute_file(infile, outfile, subsdict)
         import mari_reduction_existing
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MARws_existing_1.84meV.nxspe')))
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MARws_existing_1.1meV.nxspe')))
+        cksum = {}
+        for ff in ['MARws_existing_1.84meV.nxspe', 'MARws_existing_1.1meV.nxspe']:
+            cksum[ff] = self.load_return_sum(os.path.join(self.outputpath, ff))
+        assert_allclose(cksum['MARws_existing_1.84meV.nxspe'], [163949.90492295238, 630.5250778015388])
+        assert_allclose(cksum['MARws_existing_1.1meV.nxspe'], [20984.04034614979, 54.3481109137481])
 
 
     def test_LET_QENS(self):
@@ -134,10 +155,12 @@ class DGReductionTest(unittest.TestCase):
         outfile = os.path.join(self.outputpath, 'let_reduction.py')
         self.substitute_file(infile, outfile, subsdict)
         import let_reduction
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET93338_3.7meV_red.nxs')))
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET93338_1.77meV_red.nxs')))
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'LET93338_1.03meV_red.nxs')))
-        ws = s_api.Load(os.path.join(self.outputpath, 'LET93338_3.7meV_red.nxs'))
+        cksum = {}
+        for ff in ['LET93338_3.7meV_red.nxs', 'LET93338_1.77meV_red.nxs', 'LET93338_1.03meV_red.nxs']:
+            cksum[ff] = self.load_return_sum(os.path.join(self.outputpath, ff))
+        assert_allclose(cksum['LET93338_3.7meV_red.nxs'], [3192.464851059197, 29.13919482652566])
+        assert_allclose(cksum['LET93338_1.77meV_red.nxs'], [3105.388960389411, 13.568151311273674])
+        assert_allclose(cksum['LET93338_1.03meV_red.nxs'], [124.64663186380675, 0.31298472468130645])
 
 
     def test_LET_same_angle(self):
@@ -166,6 +189,8 @@ class DGReductionTest(unittest.TestCase):
         self.assertTrue('Plus' in [v.split('_')[0] for v in algs.keys()])
         loaded_files = [p.value() for al, pp in algs.items() if 'Load' in al for p in pp if p.name() == 'Filename']
         self.assertTrue(any(['92089' in v for v in loaded_files]) and any(['92168' in v for v in loaded_files]))
+        cksum = {'LET92089_3.7meV_1to1.nxs':self.load_return_sum(ws_out)}
+        assert_allclose(cksum['LET92089_3.7meV_1to1.nxs'], [1532857.3406259378, 12756.274264973032])
 
 
     def test_MERLIN(self):
@@ -191,8 +216,10 @@ class DGReductionTest(unittest.TestCase):
         outfile = os.path.join(self.outputpath, 'merlin_reduction.py')
         self.substitute_file(infile, outfile, subsdict)
         import merlin_reduction
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MER59151_150meV_powder.nxspe')))
-        ws = s_api.Load(os.path.join(self.outputpath, 'MER59151_150meV_powder.nxspe'))
+        filepath = os.path.join(self.outputpath, 'MER59151_150meV_powder.nxspe')
+        self.assertTrue(os.path.exists(filepath))
+        cksum = {'MER59151_150meV_powder.nxspe':self.load_return_sum(filepath)}
+        assert_allclose(cksum['MER59151_150meV_powder.nxspe'], [1.3581422074777563e-06, 0.0])
 
 
     def test_MAPS(self):
@@ -221,8 +248,10 @@ class DGReductionTest(unittest.TestCase):
         outfile = os.path.join(self.outputpath, 'maps_reduction.py')
         self.substitute_file(infile, outfile, subsdict)
         import maps_reduction
-        self.assertTrue(os.path.exists(os.path.join(self.outputpath, 'MAP41335_80meV_1to1.nxspe')))
-        ws = s_api.Load(os.path.join(self.outputpath, 'MAP41335_80meV_1to1.nxspe'))
+        filepath = os.path.join(self.outputpath, 'MAP41335_80meV_1to1.nxspe')
+        self.assertTrue(os.path.exists(filepath))
+        cksum = {'MAP41335_80meV_1to1.nxspe':self.load_return_sum(filepath)}
+        assert_allclose(cksum['MAP41335_80meV_1to1.nxspe'], [23131.138680620898, 4327.7270169435615])
 
 
     def test_auto_iliad(self):
@@ -241,9 +270,23 @@ class DGReductionTest(unittest.TestCase):
         run_reduction(sample=[97138, 97139], Ei_list=[1.7], sumruns=True, wv_file='WV_91329.txt', 
                       inst='LET', mask='LET_mask_222.xml', powdermap='LET_rings_222.xml',
                       cs_block='T_Stick', cs_block_unit='K', cs_bin_size=10)
+        cksum = {}
         for tt in np.arange(197.9, 288, 10):
-            self.assertTrue(os.path.exists(os.path.join(self.outputpath, f'LET97138_1.7meV_{tt}K_powder.nxspe')))
+            filepath = os.path.join(self.outputpath, f'LET97138_1.7meV_{tt}K_powder.nxspe')
+            self.assertTrue(os.path.exists(filepath))
+            cksum[f'LET97138_1.7meV_{tt}K_powder.nxspe'] = self.load_return_sum(filepath)
+        assert_allclose(cksum['LET97138_1.7meV_197.9K_powder.nxspe'], [44450.029085027454, 186.0716814404816])
+        assert_allclose(cksum['LET97138_1.7meV_207.9K_powder.nxspe'], [4494.497021939263, 18.816841893155306])
+        assert_allclose(cksum['LET97138_1.7meV_217.9K_powder.nxspe'], [2518.131943374195, 10.572366288273505])
+        assert_allclose(cksum['LET97138_1.7meV_227.9K_powder.nxspe'], [1592.3142473214912, 6.667062755720883])
+        assert_allclose(cksum['LET97138_1.7meV_237.9K_powder.nxspe'], [1577.2556582201576, 6.562542336896957])
+        assert_allclose(cksum['LET97138_1.7meV_247.9K_powder.nxspe'], [1518.5858436837416, 6.283506446675478])
+        assert_allclose(cksum['LET97138_1.7meV_257.9K_powder.nxspe'], [1144.3779715386936, 3.803046383223965])
+        assert_allclose(cksum['LET97138_1.7meV_267.9K_powder.nxspe'], [1093.830399356654, 3.394667791223837])
+        assert_allclose(cksum['LET97138_1.7meV_277.9K_powder.nxspe'], [1074.4433555947203, 3.1890836860885927])
+        assert_allclose(cksum['LET97138_1.7meV_287.9K_powder.nxspe'], [1059.5601228491867, 3.0205581732234803])
         
 
 if __name__ == '__main__':
     unittest.main()
+
