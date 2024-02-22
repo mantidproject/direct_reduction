@@ -72,7 +72,7 @@ QENS = False                    # output Q-binned data for QENS data analysis '_
 Qbins = 20                      # approximate number of Q-bins for QENS
 theta_range = [5., 65.]         # useful theta range for Q-binning (QENS)
 idebug = False                  # keep workspaces and check absolute units on elastic line
-save_dir = f'/instrument/{inst}/RBNumber/USER_RB_FOLDER'  # Set to None to avoid reseting
+save_dir = f'/data/analysis/{inst}/RBNumber/USER_RB_FOLDER'  # Set to None to avoid reseting
 psi_motor_name = 'rot'          # name of the rotation motor in the logs
 angles_workspace = 'angles_ws'  # name of workspace to store previously seen angles
 sumruns_savemem = False         # Compresses event in summed ws to save memory
@@ -111,10 +111,12 @@ else:
 
 cycle_shortform = cycle[2:] if cycle.startswith('20') else cycle
 datadir = f'/archive/NDX{inst}/Instrument/data/cycle_{cycle_shortform}/'
+datadir2 = f'/data/instrument/{inst}/CYCLE_20{cycle_shortform.replace("_","")}/USER_RB_FOLDER/'
 instfiles  = '/usr/local/mprogs/InstrumentFiles/'
 mapdir  = f'{instfiles}/{inst.swapcase()}/'
 config.appendDataSearchDir(mapdir)
 config.appendDataSearchDir(datadir)
+config.appendDataSearchDir(datadir2)
 ws_list = ADS.getObjectNames()
 
 # Try to load subsidiary utilities

@@ -139,16 +139,21 @@ def copy_inst_info(outfile, in_ws):
             spec2work = f'{spe_root}/instrument/detector_elements_1/spec2work'
             ws = mtd[in_ws]
             if n_spec == ws.getNumberHistograms():
-                s2w = np.arange(n_spec)
+                s2w = np.arange(1, n_spec+1)
             else:
                 nmon = np.array(raw['/raw_data_1/isis_vms_compat/NMON'])[0]
                 spec = np.array(raw['/raw_data_1/isis_vms_compat/SPEC'])[nmon:]
                 udet = np.array(raw['/raw_data_1/isis_vms_compat/UDET'])[nmon:]
                 _, iq = np.unique(spec, return_index=True)
-                s2 = np.hstack([np.array(ws.getSpectrum(ii).getDetectorIDs()) for ii in range(ws.getNumberHistograms())])
-                _, c1, _ = np.intersect1d(udet[iq], s2, return_indices=True)
+                s2, i2 = [], []
+                for ii in range(ws.getNumberHistograms()):
+                    d_id = ws.getSpectrum(ii).getDetectorIDs()
+                    s2 += d_id
+                    i2 += [ii+1]*len(d_id)
+                _, c1, c2 = np.intersect1d(udet[iq], s2, return_indices=True)
                 s2w = -np.ones(iq.shape, dtype=np.int32)
-                s2w[c1] = np.array(ws.getIndicesFromDetectorIDs(s2[c1].tolist()))
+                s2w[c1] = np.array(i2)[c2]
+                #print(udet[iq[np.where(s2w==0)])
             spe[detroot].create_dataset('spec2work', s2w.shape, dtype='i4', data=s2w)
 
 #========================================================
@@ -180,7 +185,7 @@ def shift_frame_for_mari_lowE(origEi, wsname='ws_norm', wsmon='ws_monitors'):
             ws_norm = ScaleX(wsname, 20000, Operation='Add', IndexMin=0, IndexMax=ws_norm.getNumberHistograms()-1, OutputWorkspace=ws_out)
     return ws_norm, ws_monitors
 
-def gen_ana_bkg(quietws='MAR28952', target_ws=None):
+def gen_ana_bkg(quietws='MAR29313', target_ws=None):
     # Generates an analytic background workspace from the quiet counts data
     # by fitting each spectra with a decaying exponential a*exp(-b*ToF)
     if quietws not in mtd:
