@@ -111,7 +111,7 @@ else:
 
 cycle_shortform = cycle[2:] if cycle.startswith('20') else cycle
 datadir = f'/archive/NDX{inst}/Instrument/data/cycle_{cycle_shortform}/'
-datadir2 = f'/data/instrument/{inst}/CYCLE_20{cycle_shortform.replace("_","")}/USER_RB_FOLDER/'
+datadir2 = f'/data/instrument/{inst}/CYCLE20{cycle_shortform.replace("_","")}/USER_RB_FOLDER/'
 instfiles  = '/usr/local/mprogs/InstrumentFiles/'
 mapdir  = f'{instfiles}/{inst.swapcase()}/'
 config.appendDataSearchDir(mapdir)
@@ -224,11 +224,12 @@ else:
 # =======================load background runs and sum=========================
 if sample_cd is not None:
     ws_cd = load_sum(sample_cd)
+    ws_cd = NormaliseByCurrent(ws_cd)
 if sample_bg is not None:
     ws_bg = load_sum(sample_bg)
+    ws_bg = NormaliseByCurrent(ws_bg)
     if sample_cd is not None:
         ws_bg = ws_bg - ws_cd
-    ws_bg = NormaliseByCurrent(ws_bg)
 
 # ==========================continuous scan stuff=============================
 if cs_block and cs_bin_size > 0:

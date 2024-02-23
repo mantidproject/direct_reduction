@@ -43,7 +43,7 @@ if save_dir is not None:
 cycle_shortform = cycle[2:] if cycle.startswith('20') else cycle
 data_dir = f'/archive/NDX{inst}/Instrument/data/cycle_{cycle_shortform}/'
 config.appendDataSearchDir(data_dir)
-data_dir = f'/data/instrument/{inst}/CYCLE_20{cycle_shortform.replace("_","")}/USER_RB_FOLDER/'
+data_dir = f'/data/instrument/{inst}/CYCLE20{cycle_shortform.replace("_","")}/RB0/'
 config.appendDataSearchDir(data_dir)
 if save_dir is not None:
     config.appendDataSearchDir(save_dir)
