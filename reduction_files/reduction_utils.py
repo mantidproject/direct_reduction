@@ -478,6 +478,10 @@ def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=
         ReplaceSpecialValues(wv_file, SmallNumberThreshold=1e-20, SmallNumberValue='NaN', OutputWorkspace=wv_file)
     except ValueError:
         run_whitevan(whitevan=wbvan, **wv_args)
+        ws = mtd['WV_normalised_integrals']
+        if ws.getNumberHistograms() == 919:
+            RemoveSpectra(ws, [0], OutputWorkspace=ws.name())
+            SaveAscii(ws, wv_file)
     Ei_list = ei if hasattr(ei, '__iter__') else [ei]
     if 'hard_mask_file' in kwargs:
         kwargs['mask'] = kwargs.pop('hard_mask_file')
