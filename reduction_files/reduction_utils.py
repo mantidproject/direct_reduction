@@ -228,6 +228,20 @@ def gen_ana_bkg(quietws='MAR29313', target_ws=None):
     bkg_ev = ConvertToEventWorkspace(wx)
     return bkg_ev, wx
 
+def mari_remove_ana_bkg(wsname):
+    if sub_ana is True and not sample_cd:
+        if 'bkg_ev' not in mtd:
+            gen_ana_bkg()
+        current = mtd[wsname].run().getProtonCharge()
+        if isinstance(mtd[wsname], mantid.dataobjects.EventWorkspace):
+            ws = mtd[wsname] - mtd['bkg_ev'] * current
+        else:
+            try:
+                ws = mtd[wsname] - mtd['bkg_his'] * current
+            except ValueError:
+                gen_ana_bkg(target_ws=mtd[wsname])
+                ws = mtd[wsname] - mtd['bkg_his'] * current
+
 #========================================================
 # Auto-Ei routine
 
