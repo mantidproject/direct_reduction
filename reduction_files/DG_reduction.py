@@ -351,7 +351,7 @@ for irun in sample:
     # instrument geometry to work out ToF ranges
     sampos = ws.getInstrument().getSample().getPos()
     l1 = (sampos - ws.getInstrument().getSource().getPos()).norm()
-    l2 = (ws.getDetector(0).getPos() - sampos).norm()
+    l2 = (ws.getDetector(ws.getSpectrumNumbers()[0]).getPos() - sampos).norm()
 
     # Updates ei_loop if auto _and_ not using monovan
     if use_auto_ei:
