@@ -140,7 +140,11 @@ def tryload(irun):              # loops till data file appears
         try:
             ws = Load(str(irun),LoadMonitors=True)
         except TypeError:
-            ws = Load(str(irun),LoadMonitors='Separate')
+            try:
+                ws = Load(str(irun),LoadMonitors='Separate')
+            except ValueError: # Possibly when file is being copied over from NDX machine
+                Pause(2)
+                ws = Load(str(irun),LoadMonitors=True)
         except ValueError:
             print(f'...waiting for run #{irun}')
             Pause(file_wait)
