@@ -110,22 +110,54 @@ def copy_inst_info(outfile, in_ws):
         return
     if not os.path.exists(outfile):
         outfile = os.path.join(mantid.simpleapi.config['defaultsave.directory'], os.path.basename(outfile))
+    en0 = mtd[in_ws].getEFixed(mtd[in_ws].getDetector(0).getID())
     with h5py.File(raw_file_name, 'r') as raw:
         exclude = ['dae', 'detector_1', 'name']
-        to_copy = [k for k in raw['/raw_data_1/instrument'] if not any([x in k for x in exclude])]
+        to_copy = set([k for k in raw['/raw_data_1/instrument'] if not any([x in k for x in exclude])])
         if 'aperture' not in to_copy and 'mono_chopper' not in to_copy:
             return
+        reps = [k for k in to_copy if k.startswith('rep_')]
+        to_copy = to_copy.difference(reps)
+        has_fermi = 'fermi' in to_copy
+        is_main_rep = False
+        thisrep = None
+        if has_fermi:
+            if np.abs(en0 - float(raw['/raw_data_1/instrument/fermi/energy'][()])) < (en0/20):
+                is_main_rep = True
+            elif len(reps) == 0:
+                return     # No rep information
+            fermi_grp = raw['/raw_data_1/instrument/fermi/']
+            to_copy = to_copy.difference(set(['fermi']))
+        if not is_main_rep and len(reps) > 0:
+            thisrep = reps[np.argsort([np.abs(en0 - float(k[4:])) for k in reps])[0]]
+            if np.abs(en0 - float(thisrep[4:])) > (en0/20):
+                return     # No rep information
+            rep_copy = [k for k in raw[f'/raw_data_1/instrument/{thisrep}']]
+            if 'fermi' in rep_copy:
+                has_fermi = True
+                fermi_grp = raw[f'/raw_data_1/instrument/{thisrep}/fermi']
+                rep_copy = rep_copy.difference(['fermi'])
         n_spec = len(raw['/raw_data_1/instrument/detector_1/spectrum_index'])
         with h5py.File(outfile, 'r+') as spe:
             spe_root = list(spe.keys())[0]
-            en0 = spe[f'{spe_root}/instrument/fermi/energy'][()]
-            if 'fermi' in to_copy:
-                del spe[f'{spe_root}/instrument/fermi']
+            if has_fermi:
+                fields = set([k for k in fermi_grp]).difference(['energy', 'rotation_speed'])
+                for fd in fields:
+                    src = fermi_grp[fd]
+                    h5py.Group.copy(src, src, spe[f'{spe_root}/instrument/fermi'])
+                if 'rotation_speed' in fermi_grp:
+                    spe[f'{spe_root}/instrument/fermi'].create_dataset('rotation_speed', (), dtype='float64')
+                    spe[f'{spe_root}/instrument/fermi/rotation_speed'][()] = fermi_grp['rotation_speed'][()]
+                    for atr in fermi_grp['rotation_speed'].attrs:
+                        spe[f'{spe_root}/instrument/fermi/rotation_speed'].attrs[atr] = fermi_grp['rotation_speed'].attrs[atr]
+            if not is_main_rep and thisrep is not None:
+                for grp in rep_copy:
+                    src = raw[f'/raw_data_1/instrument/{thisrep}/{grp}']
+                    h5py.Group.copy(src, src, spe[f'{spe_root}/instrument/'])
+                    to_copy = to_copy.difference([grp])
             for grp in to_copy:
                 src = raw[f'/raw_data_1/instrument/{grp}']
                 h5py.Group.copy(src, src, spe[f'{spe_root}/instrument/'])
-            if 'fermi' in to_copy:
-                spe[f'{spe_root}/instrument/fermi/energy'][()] = en0
             detroot = f'{spe_root}/instrument/detector_elements_1'
             spe.create_group(detroot)
             spe[detroot].attrs['NX_class'] = np.array('NXdetector', dtype='S')
