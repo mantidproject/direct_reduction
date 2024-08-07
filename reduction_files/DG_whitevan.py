@@ -59,6 +59,9 @@ def try_load_no_mon(irun, ws_name=None):
         ws_name = ws_name[0]
     try:
         return Load(str(irun), LoadMonitors='Exclude', OutputWorkspace=ws_name)
+    except RuntimeError:
+        ws_load = Load(str(irun), LoadMonitors='Include', OutputWorkspace=ws_name)
+        ExtractMonitors(ws_load, DetectorWorkspace=ws_name, MonitorWorkspace=ws_name+'_monitors')
     except ValueError:
         return Load(str(irun), LoadMonitors=False, OutputWorkspace=ws_name)
 

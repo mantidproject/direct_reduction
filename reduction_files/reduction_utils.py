@@ -535,12 +535,15 @@ def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=
         kwargs['sumruns'] = True
     if monovan is not None and isinstance(monovan, (int, float)) and monovan > 0:
         mv_file = f'MV_{monovan}.txt'
-        mvkw = {'mask':kwargs['mask']} if 'mask' in kwargs else {}
-        if 'inst' in kwargs: mvkw['inst'] = kwargs['inst']
+        mvkw = {}
+        for pp in [v for v in ['mask', 'inst'] if v in kwargs]:
+            mvkw[pp] = kwargs[pp]
         try:
-            LoadAscii(wv_file, OutputWorkspace=wv_file)
+            LoadAscii(mv_file, OutputWorkspace=mv_file)
+            ReplaceSpecialValues(mv_file, SmallNumberThreshold=1e-20, SmallNumberValue='NaN', OutputWorkspace=mv_file)
         except ValueError:
             run_monovan(monovan=monovan, Ei_list=Ei_list, wv_file=wv_file, **mvkw)
         kwargs['sample_mass'] = sam_mass
         kwargs['sample_fwt'] = sam_rmm
+        kwargs['mv_file'] = mv_file
     run_reduction(sample=runno, Ei_list=ei if hasattr(ei, '__iter__') else [ei], wv_file=wv_file, **kwargs)
