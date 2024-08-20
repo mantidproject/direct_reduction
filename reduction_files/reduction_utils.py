@@ -159,34 +159,30 @@ def copy_inst_info(outfile, in_ws):
                 src = raw[f'/raw_data_1/instrument/{grp}']
                 h5py.Group.copy(src, src, spe[f'{spe_root}/instrument/'])
             detroot = f'{spe_root}/instrument/detector_elements_1'
+            udet = np.array(raw['/raw_data_1/isis_vms_compat/UDET'])
             spe.create_group(detroot)
             spe[detroot].attrs['NX_class'] = np.array('NXdetector', dtype='S')
-            for df0, df1 in zip(['SPEC', 'UDET', 'DELT', 'LEN2', 'CODE', 'TTHE', 'UT01'], \
-                ['det2spec', 'detector_number', 'delt', 'distance', 'detector_code', 'polar_angle', 'azimuthal_angle']):
+            for df0, df1 in zip(['UDET', 'DELT', 'LEN2', 'CODE', 'TTHE', 'UT01'], \
+                ['detector_number', 'delt', 'distance', 'detector_code', 'polar_angle', 'azimuthal_angle']):
                 src = raw[f'/raw_data_1/isis_vms_compat/{df0}']
                 h5py.Group.copy(src, src, spe[detroot], df1)
             for nn in range(raw['/raw_data_1/isis_vms_compat/NUSE'][0]):
                 src = raw[f'/raw_data_1/isis_vms_compat/UT{nn+1:02d}']
                 h5py.Group.copy(src, src, spe[detroot], f'user_table{nn+1:02d}')
-            spec2work = f'{spe_root}/instrument/detector_elements_1/spec2work'
             ws = mtd[in_ws]
-            if n_spec == ws.getNumberHistograms():
-                s2w = np.arange(1, n_spec+1)
-            else:
-                nmon = np.array(raw['/raw_data_1/isis_vms_compat/NMON'])[0]
-                spec = np.array(raw['/raw_data_1/isis_vms_compat/SPEC'])[nmon:]
-                udet = np.array(raw['/raw_data_1/isis_vms_compat/UDET'])[nmon:]
-                _, iq = np.unique(spec, return_index=True)
-                s2, i2 = [], []
-                for ii in range(ws.getNumberHistograms()):
-                    d_id = ws.getSpectrum(ii).getDetectorIDs()
-                    s2 += d_id
-                    i2 += [ii+1]*len(d_id)
-                _, c1, c2 = np.intersect1d(udet[iq], s2, return_indices=True)
-                s2w = -np.ones(iq.shape, dtype=np.int32)
-                s2w[c1] = np.array(i2)[c2]
-                #print(udet[iq[np.where(s2w==0)])
-            spe[detroot].create_dataset('spec2work', s2w.shape, dtype='i4', data=s2w)
+            s2, i2 = [], []
+            for ii in range(ws.getNumberHistograms()):
+                d_id = ws.getSpectrum(ii).getDetectorIDs()
+                s2 += d_id
+                i2 += [ii+1] * len(d_id)
+            _, c1, c2 = np.intersect1d(udet, s2, return_indices=True)
+            d2w = -np.ones(udet.shape, dtype=np.int32)
+            d2w[c1] = np.array(i2)[c2]
+            # Loads masks and process
+            dI = ws.detectorInfo()
+            iM = np.array([dI.isMasked(ii) for ii in range(len(dI))])
+            spe[detroot].create_dataset('det2work', d2w.shape, dtype='i4', data=d2w)
+            spe[detroot].create_dataset('det_mask', iM.shape, dtype=np.bool_, data=iM)
 
 #========================================================
 # MARI specific functions
