@@ -363,10 +363,21 @@ def autoei(ws):
             freq = mode(getLog('Fermi_Speed'))
         except ValueError:
             return []
-        phase1, phase2 = (mode(getLog(nam)) for nam in ['Phase_Thick_1', 'Phase_Thick_2'])
         delay = getfracLog('Fermi_delay')
         lmc = 10.04   # Moderator-Fermi distance
         period = 1.e6 / freq
+        try:
+            phase1, phase2 = (mode(getLog(nam)) for nam in ['Phase_Thick_1', 'Phase_Thick_2'])
+        except RuntimeError:
+            # Pre-upgrade MARI - single slot disk
+            phase_disk = mode(getLog('Phase_Thick')) + 500 # Offset used in mari_utils.gcl
+            eis_disk = ((2286.26*7.05) / (phase_disk))**2
+            if mode(getLog('Freq_Thick')) > 0 or (run.hasProperty('nchannels') and run.getProperty('nchannels').value > 1000):
+                return [eis_disk]
+            else:
+                delay_calc = ((2286.26 * lmc) / np.sqrt(eis_disk))
+                eis = list({((2286.26*lmc) / (delay_calc + s*period))**2 for s in range(-10, 10)})
+                return [roundlog10(ei) for ei in np.sort(eis)[::-1] if ei > 10]
         try:
             ei_nominal = mode(getLog('Ei_nominal'))
         except RuntimeError:  # Old file
@@ -381,10 +392,10 @@ def autoei(ws):
         disk_delta = delt_disk2 - delt_disk1
         slots_delta = np.round(disk_delta / 202.11) / 10
         assert slots_delta % 1.0 < 0.2, 'Bad slots calculation'
-        slots = {0:[0,1,2,4], 1:[0,1], 2:[0,2], 4:[0]}[abs(int(slots_delta))]
+        slots = {0:[0,1,2,4], 1:[0,1], 2:[0,2], 3:[0], 4:[0]}[abs(int(slots_delta))]
         disk_ref = 6 - (np.round(delt_disk1 / 202.11) / 10)
         assert disk_ref % 1.0 < 0.2, f'Bad disk calculation'
-        disk = {0:disk_ref, 1:disk_ref-1, 2:1 if disk_ref==2 else 0, 4:0}[abs(int(slots_delta))]
+        disk = {0:disk_ref, 1:disk_ref-1, 2:1 if disk_ref==2 else 0, 3:0, 4:0}[abs(int(slots_delta))]
         reps = [d-disk for d in slots]
         eis_disk = {((2286.26*lmc) / (delay_calc + s*2500.))**2 for s in reps}
         period = period / 2. if 'G' in chopper_type.upper() else period
