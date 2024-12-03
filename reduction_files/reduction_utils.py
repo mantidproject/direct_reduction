@@ -443,9 +443,11 @@ def autoei(ws):
         ldc = 9.2176   # Mod-Disk distance
         if not rrm_mode:
             return [roundlog10(((2286.26*ldc) / disk_delay)**2)]
-        else:          # Assume using Gd chopper (t_offset = 2000/freq-5, for 'S' it is 300/freq-8)
+        else:          # Assume using Gd chopper (t_offset = 2000/freq-5, for 'S' it is 300/freq-8.1)
+            # The opto on the Fermi was replaced on 28/11/24 - need to use different constants
+            m, c = (2000, -5) if run.endTime().to_datetime64() < np.datetime64('2024-11-27') else (6483, -5.5)
             period = 20000 * (25. / freq)
-            tof = (2286.26 * lmc) / np.sqrt(roundlog10(((2286.26 * lmc) / (delay - 2000/freq - 2))**2))
+            tof = (2286.26 * lmc) / np.sqrt(roundlog10(((2286.26 * lmc) / (delay - m/freq - c))**2))
             tfmx = 7500 if np.abs(disk_delay - 12400) < 10 else 8500
             return [roundlog10(((2286.26*lmc) / tf)**2) for tf in [(tof + s*period) for s in range(-10, 10)] if tf > 1500 and tf < tfmx]
 
