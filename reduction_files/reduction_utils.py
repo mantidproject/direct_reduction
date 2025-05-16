@@ -526,6 +526,7 @@ def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=
     wv_file = f'WV_{wv_name}.txt'
     wv_args = {}
     if 'inst' in kwargs:
+        kwargs['inst'] = kwargs['inst'].upper()
         config['default.instrument'] = kwargs['inst']
         wv_args = {'inst':kwargs['inst']}
     try:
