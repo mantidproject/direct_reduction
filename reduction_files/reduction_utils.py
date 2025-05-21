@@ -37,6 +37,8 @@ def _get_mon_from_history(ws_name):
     # loads the monitors from that raw file.
     orig_file = None
     for hist in mtd[ws_name].getHistory().getAlgorithmHistories():
+        if hist.name().startswith('StartLiveData'):
+            return _create_dummy_monitors(ws_name)
         if hist.name().startswith('Load') and 'Filename' in [pp.name() for pp in hist.getProperties()]:
             orig_file = hist.getPropertyValue('Filename')
             break
@@ -51,6 +53,15 @@ def _get_mon_from_history(ws_name):
     DeleteWorkspace('tmp_mons')
     mtd[ws_name].setMonitorWorkspace(mtd[ws_mon_name])
     CloneWorkspace(ws_mon_name, OutputWorkspace='ws_monitors')
+
+def _create_dummy_monitors(ws_name):
+    # Creates dummy monitors for a live data workspace
+    #ws = mtd[ws_name]
+    #inst = ws.getInstrument().getName()
+    wstmpmon = LoadEventNexus('/archive/cycle_25_1/NDXMERLIN/MER71660.nxs', OutputWorkspace='__tmpwsmon', LoadMonitors=True)
+    RenameWorkspace('__tmpwsmon_monitors', OutputWorkspace='ws_monitors')
+    CopyInstrumentParameters('__tmpwsmon', OutputWorkspace='ws')
+    DeleteWorkspace('__tmpwsmon')
 
 def get_angle(irun, angle_workspace='angle_ws', psi_motor_name='rot', tryload=None):
     # Checks if a workspace with previous angles exists and if we've seen this run before

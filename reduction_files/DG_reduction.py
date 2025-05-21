@@ -78,6 +78,7 @@ sumruns_savemem = False         # Compresses event in summed ws to save memory
 cs_smidge = 0.001               # Tolerance on continuous scan bins size
 cs_conv_to_md = False           # Convert a continuous scan to an MDWorkspace
 cs_conv_pars = {}               # A dict with 'lattice_pars', 'lattice_angles', 'u', 'v', 'psi0'
+cs_single = False               # Outputs an EventWorkspace of a continuous scan (does not histogram)
 #========================================================
 #!end_params
 
@@ -351,14 +352,17 @@ for irun in sample:
             tryload(irun)
             print(f'Loading run# {irun}')
 
-    ws = NormaliseByCurrent('ws')
+    try:
+        ws = NormaliseByCurrent('ws')
+    except RuntimeError:
+        pass
     if sumruns and sumruns_savemem:
         ws = CompressEvents(ws, Tolerance=1e-5)  # Tolerance in microseconds
 
     # instrument geometry to work out ToF ranges
     sampos = ws.getInstrument().getSample().getPos()
     l1 = (sampos - ws.getInstrument().getSource().getPos()).norm()
-    l2 = (ws.getDetector(ws.getSpectrumNumbers()[0]).getPos() - sampos).norm()
+    l2 = (ws.getDetector(ws.getSpectrumNumbers()[1]).getPos() - sampos).norm()
 
     # Updates ei_loop if auto _and_ not using monovan
     if use_auto_ei:
@@ -424,8 +428,9 @@ for irun in sample:
         MoveInstrumentComponent(ws_rep, ComponentName=source, Z=m2pos, RelativePosition=False)
 
         ws_rep = ConvertUnits(ws_rep, 'DeltaE', EMode='Direct', EFixed=Ei)
-        ws_out = Rebin(ws_rep, [x*origEi for x in Erange], PreserveEvents=False)
-        ws_out = DetectorEfficiencyCor(ws_out, IncidentEnergy=Ei)
+        ws_out = Rebin(ws_rep, [x*origEi for x in Erange], PreserveEvents=cs_single)
+        if not cs_single:
+            ws_out = DetectorEfficiencyCor(ws_out, IncidentEnergy=Ei)
         ws_out = CorrectKiKf(ws_out, Efixed=Ei, EMode='Direct')
         ADS.remove('ws_rep')
 
@@ -474,7 +479,11 @@ for irun in sample:
             SetUB('ws_out', a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma, u=cs_conv_pars['u'], v=cs_conv_pars['v'])
             mn, mx = ConvertToMDMinMaxGlobal('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='HKL')
             ConvertToMD('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='HKL', QConversionScales='HKL',
-                MinValues=mn, MaxValues=mx, PreprocDetectorsWS='-', OutputWorkspace=ofile+'_md')
+                MinValues=mn, MaxValues=mx, PreprocDetectorsWS='-', OutputWorkspace=ofile+'_ang_md')
+            continue
+
+        if cs_single:
+            CloneWorkspace('ws_out', OutputWorkspace='single_md')
             continue
 
         # output appropriate formats
