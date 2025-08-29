@@ -16,7 +16,8 @@ from enum import Enum
 from scipy.optimize import minimize
 from datetime import datetime
 import sys
-sys.path.append("/home/tw1085782/MAPS/Alignment script/Class_Definitions")
+from pathlib import Path
+sys.path.append(Path(__file__).parent))
 from Class_Definitions import MAPS, MERLIN, LET, reflection_condition, UB_METHOD, Peak_picking_methods
 #====================================================#
 #Script for determining UB Matrices for samples on machines at ISIS
@@ -405,4 +406,5 @@ if Predict_peaks == True:
     bin_range_lower = min_dspacing
     bin_range_upper = max_dspacing
     iv.set_bin_range(bin_range_lower, bin_range_upper)
+
     iv.show_view()
