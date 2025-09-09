@@ -54,13 +54,17 @@ def _get_mon_from_history(ws_name):
     mtd[ws_name].setMonitorWorkspace(mtd[ws_mon_name])
     CloneWorkspace(ws_mon_name, OutputWorkspace='ws_monitors')
 
+MONDAT = {
+    'MERLIN': {'ws':range(69633, 69642), 'l2':[3.258]+[1.504]*4+[4.247]*4, 'th':[180]*5+[0]*4},
+    'MAPS': {'ws':range(36864, 36868)), 'l2':[4.109,2.805,1.716,8.35], 'th':[180]*3+[0]},
+    'LET': {'ws':range(98304,98312)), 'l2':[17.758, 17.06, 16.558, 13.164, 9.255, 1.333, 1.088, 1.088], 'th':[180]*8}
+}
 def _create_dummy_monitors(ws_name):
     # Creates dummy monitors for a live data workspace
-    #ws = mtd[ws_name]
-    #inst = ws.getInstrument().getName()
-    wstmpmon = LoadEventNexus('/archive/cycle_25_1/NDXMERLIN/MER71660.nxs', OutputWorkspace='__tmpwsmon', LoadMonitors=True)
-    RenameWorkspace('__tmpwsmon_monitors', OutputWorkspace='ws_monitors')
-    CopyInstrumentParameters('__tmpwsmon', OutputWorkspace='ws')
+    inst = mtd[ws_name].getInstrument().getName()
+    CreateSimulationWorkspace(inst, [100,100,19000], UnitX='TOF', OutputWorkspace='__tmpwsmon')
+    ExtractSpectra('__tmpwsmon', WorkspaceIndexList=MONDAT[inst]['ws'], OutputWorkspace='__tmpwsmon')
+    EditInstrumentGeometry('__tmpwsmon', L2=MONDAT[inst]['l2'], Polar=MONDAT[inst]['th'], OutputWorkspace='ws_monitors')
     DeleteWorkspace('__tmpwsmon')
 
 def get_angle(irun, angle_workspace='angle_ws', psi_motor_name='rot', tryload=None):
