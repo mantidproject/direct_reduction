@@ -294,6 +294,7 @@ class DGReductionTest(unittest.TestCase):
                     'INSTRUMENT_NAME':'MAPS',
                     'peak_picking_method = ': 'peak_picking_method = "MANUAL"; ppm = [(1.927, 12504126, 4664, 2321.), (3.290, 43102202, 12274, 8232.)] #',
                     'Predict_peaks = ': 'Predict_peaks = False #',
+                    'from mantidqt.utils.qt import import_qt': '',
                     'from mantidqt.widgets.instrumentview.api import get_instrumentview': 'import unittest.mock\ndef get_instrumentview(*args):\n    return unittest.mock.MagicMock()',
                     'time.sleep\(1\)': 'AddPeak("SingleCrystalPeakTable", "ws", *ppm[x]); break'}
         s_api.config['default.instrument'] = 'MAPS'
