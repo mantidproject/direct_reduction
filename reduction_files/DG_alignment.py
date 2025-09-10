@@ -117,6 +117,8 @@ match peak_picking_method:
     case "MANUAL":
         for x in range(len(run_numbers)):
             ws = Load(f'{datadir}/{instrument_name[:3]}{run_numbers[x]}', EnableLogging=False)
+            if x == 0:
+                CreatePeaksWorkspace(ws, 0, OutputWorkspace="SingleCrystalPeakTable",  EnableLogging=False)
             ws = ConvertUnits(ws, Target='dSpacing', EMode='Elastic', EFixed=None, EnableLogging=False) #converting  TOF to dspacing
 
             #if Ei exists delete it as it causes peak pick to error
@@ -363,6 +365,7 @@ if Reorient == True:
         print('Could not write output data')
     else:
         data_file.write(results)
+        data_file.close()
 
     names = ["SingleCrystalPeakTable", "temporary_workspace"]
     WorkspaceNames = ["Processed Peak Table Unaligned", "Processed Peak Table Aligned"]
@@ -379,6 +382,7 @@ elif Reorient == False:
         print('Could not write output data')
     else:
         data_file.write(results)
+        data_file.close()
 
     names = ["SingleCrystalPeakTable"]
     WorkspaceNames = ["Processed Peak Table"]
