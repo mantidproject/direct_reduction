@@ -56,16 +56,15 @@ def _get_mon_from_history(ws_name):
 
 MONDAT = {
     'MERLIN': {'ws':range(69633, 69642), 'l2':[3.258]+[1.504]*4+[4.247]*4, 'th':[180]*5+[0]*4},
-    'MAPS': {'ws':range(36864, 36868)), 'l2':[4.109,2.805,1.716,8.35], 'th':[180]*3+[0]},
-    'LET': {'ws':range(98304,98312)), 'l2':[17.758, 17.06, 16.558, 13.164, 9.255, 1.333, 1.088, 1.088], 'th':[180]*8}
+    'MAPS': {'ws':range(36864, 36868), 'l2':[4.109,2.805,1.716,8.35], 'th':[180]*3+[0]},
+    'LET': {'ws':range(98304,98312), 'l2':[17.758, 17.06, 16.558, 13.164, 9.255, 1.333, 1.088, 1.088], 'th':[180]*8}
 }
 def _create_dummy_monitors(ws_name):
     # Creates dummy monitors for a live data workspace
     inst = mtd[ws_name].getInstrument().getName()
-    CreateSimulationWorkspace(inst, [100,100,19000], UnitX='TOF', OutputWorkspace='__tmpwsmon')
-    ExtractSpectra('__tmpwsmon', WorkspaceIndexList=MONDAT[inst]['ws'], OutputWorkspace='__tmpwsmon')
-    EditInstrumentGeometry('__tmpwsmon', L2=MONDAT[inst]['l2'], Polar=MONDAT[inst]['th'], OutputWorkspace='ws_monitors')
-    DeleteWorkspace('__tmpwsmon')
+    CreateSimulationWorkspace(inst, [100,100,19000], UnitX='TOF', OutputWorkspace='ws_monitors')
+    ExtractSpectra('ws_monitors', WorkspaceIndexList=MONDAT[inst]['ws'], OutputWorkspace='ws_monitors')
+    EditInstrumentGeometry('ws_monitors', L2=MONDAT[inst]['l2'], Polar=MONDAT[inst]['th'])
 
 def get_angle(irun, angle_workspace='angle_ws', psi_motor_name='rot', tryload=None):
     # Checks if a workspace with previous angles exists and if we've seen this run before

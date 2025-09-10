@@ -19,6 +19,7 @@ class DGReductionTest(unittest.TestCase):
         cls.outputpath = os.path.join(cls.repopath, 'tests')
         sys.path.append(cls.outputpath)
         sys.path.append(cls.scriptpath)
+        s_api.config.setLogLevel('warning')
         s_api.config['defaultsave.directory'] = cls.outputpath
         s_api.config.appendDataSearchDir(cls.datapath)
         for inst in ['let', 'maps', 'mari', 'merlin']:
@@ -285,7 +286,38 @@ class DGReductionTest(unittest.TestCase):
         assert_allclose(cksum['LET97138_1.7meV_267.9K_powder.nxspe'], [1093.830399356654, 3.394667791223837])
         assert_allclose(cksum['LET97138_1.7meV_277.9K_powder.nxspe'], [1074.4433555947203, 3.1890836860885927])
         assert_allclose(cksum['LET97138_1.7meV_287.9K_powder.nxspe'], [1059.5601228491867, 3.0205581732234803])
-        
+
+
+    def test_livedata_continuous(self):
+        # Tests a saved livestream dataset from MnO on MERLIN
+        from reduction_utils import iliad
+        s_api.Load(os.path.join(self.datapath, 'mno_live_1.nxs'), OutputWorkspace='mno_live_1')
+        output_ws = iliad(runno=['mno_live_1'], wbvan=71617, ei=[30], FixEi=True,
+            Erange=[-0.5, 0.01, 0.85], cs_block='Rot', cs_bin_size=30, cs_conv_to_md=True,
+            cs_conv_pars={'lattice_pars':[4.446]*3, 'lattice_ang':[90]*3, 'u':'1,1,0', 'v':'0,0,1', 'psi0':132.5},
+            hard_mask_file='mask_25_1.xml', inst='merlin', powdermap='MERLIN_rings_251.xml')
+        #    hard_mask_file='mask_211_fix.xml')
+        allws = [w for w in s_api.mtd.getObjectNames() if f'MERmno_live_1_30meV' in w and w.endswith('_ang_md')]
+        print('Merging Horace angle workspaces')
+        wsout = s_api.MergeMD(','.join(allws), OutputWorkspace=f'MERmno_live_1_30meV_1to1_md')
+        mn = [wsout.getDimension(i).getMinimum() for i in range (4)]
+        mx = [wsout.getDimension(i).getMaximum() for i in range (4)]
+        [s_api.DeleteWorkspace(ws) for ws in allws]
+        print(f'Rebinning MDEventWorkspace  {mn[0]:2g}<H<{mx[0]:2g}, {mn[1]:2g}<K<{mx[1]:2g}, {mn[2]:2g}<L<{mx[2]:2g}')
+        wsbin = s_api.BinMD(wsout, AlignedDim0=f'[H,0,0],{mn[0]},{mx[0]},10', AlignedDim1=f'[0,K,0],{mn[1]},{mx[1]},10',
+            AlignedDim2=f'[0,0,L],{mn[2]},{mx[2]},10', AlignedDim3=f'DeltaE,{mn[3]},{mx[3]},10')
+        wsbin = s_api.CompactMD(wsbin)
+        yy = wsbin.getSignalArray()
+        yy = yy[np.where(np.abs(yy)>10)]
+        assert_allclose(yy, [56.64, 43.62, 23.3, 39.57, 11.01, 56.14, 249.27, 13.25, 21.87, 41.07, 112.76, 12.96,
+            28.28, 73.09, 29.35, 36.78, 86.03, 14.23, 22.06, 14.6, 43.8, 17.39, 14.29, 45.69, 52.96, 209.69, 12.5,
+            19.56, 45.25, 112.54, 12.35, 27.18, 69.0, 28.78, 57.55, 120.91, 10.2, 15.32, 22.68, 15.7, 51.05, 110.55,
+            216.57, 10.16, 42.41, 16.84, 64.97, 76.65, 29.29, 57.31, 102.09, 47.73, 28.04, 16.27, 11.53, 34.6, 31.49,
+            126.82, 120.86, 33.81, 12.96, 73.7, 161.85, 29.05, 128.26, 16.58, 11.3, 26.85, 19.23, 10.87, 11.33, 17.34,
+            26.42, 15.75, 20.21, 28.5, 116.91, 29.89, 31.72, 77.38, 26.14, 179.19, 15.8, 24.85, 16.92, 10.44, 17.81,
+            30.12, 15.5, 32.23, 37.15, 153.69, 12.86, 18.06, 17.03, 28.96, 21.75, 98.81, 13.79, 19.56, 144.82, 17.22,
+            151.79, 28.43, 83.35, 19.08], atol=0.1)
+ 
 
 if __name__ == '__main__':
     unittest.main()
