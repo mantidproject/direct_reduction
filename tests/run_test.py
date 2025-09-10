@@ -287,6 +287,27 @@ class DGReductionTest(unittest.TestCase):
         assert_allclose(cksum['LET97138_1.7meV_287.9K_powder.nxspe'], [1059.5601228491867, 3.0205581732234803])
         
 
+    def test_alignment(self):
+        subsdict = {'\nconfig':'\n#config',
+                    'savedir = ':'savedir = "/tmp/" #',
+                    'datadir = ':f'datadir = "{self.datapath}" #',
+                    'INSTRUMENT_NAME':'MAPS',
+                    'peak_picking_method = ': 'peak_picking_method = "MANUAL"; ppm = [(1.927, 12504126, 4664, 2321.), (3.290, 43102202, 12274, 8232.)] #',
+                    'Predict_peaks = ': 'Predict_peaks = False #',
+                    'from mantidqt.utils.qt import import_qt': '',
+                    'from mantidqt.widgets.instrumentview.api import get_instrumentview': 'import unittest.mock\ndef get_instrumentview(*args):\n    return unittest.mock.MagicMock()',
+                    'time.sleep\(1\)': 'AddPeak("SingleCrystalPeakTable", "ws", *ppm[x]); break'}
+        s_api.config['default.instrument'] = 'MAPS'
+        infile = os.path.join(self.scriptpath, 'DG_alignment.py')
+        outfile = os.path.join(self.outputpath, 'maps_alignment.py')
+        self.substitute_file(infile, outfile, subsdict)
+        import maps_alignment
+        self.assertTrue('Processed Peak Table Aligned' in s_api.mtd)
+        self.assertTrue('Processed Peak Table Unaligned' in s_api.mtd)
+        assert_allclose(maps_alignment.u_aligned, [1., 1., 0.], rtol=0, atol=0.05)
+        assert_allclose(maps_alignment.v_aligned, [-1., 1., 0.], rtol=0, atol=0.05)
+
+
 if __name__ == '__main__':
     unittest.main()
 
