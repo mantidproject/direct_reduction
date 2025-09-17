@@ -398,7 +398,7 @@ def autoei(ws):
             ei_nominal = ((2286.26 * lmc) / delay)**2
         sqrt_ei = np.sqrt(ei_nominal)
         delay_calc = ((2286.26 * lmc) / sqrt_ei)
-        t_offset_ref = {'S':2033.3/freq-5.4, 'G':1339.9/freq-7.3}
+        t_offset_ref = {'S':2033.3/freq-5.4, 'G':1339.9/freq-7.3, 'A':-4790.69/freq+17.7}
         t_offset = delay - (delay_calc % period)
         chopper_type = min(t_offset_ref.keys(), key=lambda x:np.abs(t_offset - t_offset_ref[x]))
         nom_disk1, nom_disk2 = (((2286.26 * l) / sqrt_ei) - c for l, c in zip([7.861, 7.904], [5879., 6041.]))
@@ -409,6 +409,8 @@ def autoei(ws):
         slots = {0:[0,1,2,4], 1:[0,1], 2:[0,2], 3:[0], 4:[0]}[abs(int(slots_delta))]
         disk_ref = 6 - (np.round(delt_disk1 / 202.11) / 10)
         assert disk_ref % 1.0 < 0.2, f'Bad disk calculation'
+        if chopper_type.upper() == 'A' and disk_ref == 0:
+            disk_ref = 1
         disk = {0:disk_ref, 1:disk_ref-1, 2:1 if disk_ref==2 else 0, 3:0, 4:0}[abs(int(slots_delta))]
         reps = [d-disk for d in slots]
         eis_disk = {((2286.26*lmc) / (delay_calc + s*2500.))**2 for s in reps}
