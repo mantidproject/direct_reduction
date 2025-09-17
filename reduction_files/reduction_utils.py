@@ -45,9 +45,9 @@ def _get_mon_from_history(ws_name):
     if orig_file is None:
         raise RuntimeError(f'Cannot find original file from workspace {ws_name} to load logs from')
     try:
-        Load(orig_file, SpectrumMax=10, LoadMonitors=True, OutputWorkspace='tmp_mons')
+        LoadEventNexus(orig_file, SpectrumMax=10, LoadMonitors=True, OutputWorkspace='tmp_mons')
     except TypeError:
-        Load(orig_file, SpectrumMax=10, LoadMonitors='Separate', OutputWorkspace='tmp_mons')
+        LoadRaw(orig_file, SpectrumMax=10, LoadMonitors='Separate', OutputWorkspace='tmp_mons')
     ws_mon_name = f'{ws_name}_monitors'
     RenameWorkspace('tmp_mons_monitors', ws_mon_name)
     DeleteWorkspace('tmp_mons')
@@ -537,6 +537,17 @@ def run_whitevan(**kwargs):
 def run_monovan(**kwargs):
     run_reduction(mod='monovan', **kwargs)
 
+def _tryload(runno):
+    if isinstance(runno, str) and os.path.exists(runno):
+        print(f'{runno} file exists - pre-loading.')
+        outname = os.path.basename(runno).split('.')[0]
+        try:
+            Load(runno, OutputWorkspace=outname, LoadMonitors=True)
+        except TypeError:
+            Load(runno, OutputWorkspace=outname, LoadMonitors='Separate')
+        return outname
+    return runno
+
 def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=False, **kwargs):
     wv_name = wbvan if (isinstance(wbvan, (str, int, float)) or len(wbvan)==1) else wbvan[0]
     wv_file = f'WV_{wv_name}.txt'
@@ -572,4 +583,5 @@ def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=
         kwargs['sample_mass'] = sam_mass
         kwargs['sample_fwt'] = sam_rmm
         kwargs['mv_file'] = mv_file
+    runno = [_tryload(r) for r in runno] if isinstance(runno, list) else _tryload(runno)
     run_reduction(sample=runno, Ei_list=ei if hasattr(ei, '__iter__') else [ei], wv_file=wv_file, **kwargs)
