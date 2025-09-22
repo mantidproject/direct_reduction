@@ -406,12 +406,10 @@ def autoei(ws):
         disk_delta = delt_disk2 - delt_disk1
         slots_delta = np.round(disk_delta / 202.11) / 10
         assert slots_delta % 1.0 < 0.2, 'Bad slots calculation'
-        slots = {0:[0,1,2,4], 1:[0,1], 2:[0,2], 3:[0], 4:[0]}[abs(int(slots_delta))]
+        slots = {0:[0,1,2,4], 1:[0,1], 2:[0,2], 3:[0], 4:[0]}[abs(int(round(slots_delta)))]
         disk_ref = 6 - (np.round(delt_disk1 / 202.11) / 10)
         assert disk_ref % 1.0 < 0.2, f'Bad disk calculation'
-        if chopper_type.upper() == 'A' and disk_ref == 0:
-            disk_ref = 1
-        disk = {0:disk_ref, 1:disk_ref-1, 2:1 if disk_ref==2 else 0, 3:0, 4:0}[abs(int(slots_delta))]
+        disk = {0:disk_ref, 1:disk_ref-1, 2:1 if disk_ref==2 else 0, 3:0, 4:0}[abs(int(round(slots_delta)))]
         reps = [d-disk for d in slots]
         eis_disk = {((2286.26*lmc) / (delay_calc + s*2500.))**2 for s in reps}
         period = period / 2. if 'G' in chopper_type.upper() else period
