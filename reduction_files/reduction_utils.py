@@ -471,6 +471,28 @@ def autoei(ws):
 
 
 #========================================================
+# Continuous rotation routines
+def controt_fill_in_log(ws_full, cs_block):
+    print('## Continuous rotation log interval larger than 1s!')
+    print('## Reconstructing log by interpolation, this can take up to a minute.')
+    onesec = np.timedelta64(1, 's')
+    logval = ws_full.getRun().getLogData(cs_block)
+    logs = [[logval.filtered_times[ii], logval.filtered_value[ii]] for ii in range(logval.size())]
+    AddTimeSeriesLog(ws_full, cs_block, str(logs[0][0]), logs[0][1], DeleteExisting=True)
+    for ii in range(len(logs)-1):
+        tdif, vdif = (logs[ii+1][0] - logs[ii][0], logs[ii+1][1] - logs[ii][1])
+        if tdif > onesec and abs(vdif) > 0:
+            newstep = int(tdif / onesec)
+            v0 = logs[ii][1]
+            vdif = vdif / newstep
+            for jj in range(1, newstep):
+                tim = logs[ii][0] + onesec*jj
+                AddTimeSeriesLog(ws_full, cs_block, str(tim), v0 + vdif*jj)
+        else:
+            AddTimeSeriesLog(ws_full, cs_block, str(logs[ii][0]), logs[ii][1])
+
+
+#========================================================
 # Iliad driver routines
 
 _DGRED = None
