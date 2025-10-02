@@ -199,6 +199,7 @@ if sample_cd is not None and (isinstance(sample_cd, str) or not hasattr(sample_c
 if mask is None:
     print(f'{inst}: WARNING - No hard mask!  Bad detectors wont be removed')
 if mask not in ws_list and mask is not None:
+    assert mask.endswith('xml') or mask.endswith('msk'), 'Mask file should be .msk or .xml'
     print(f'{inst}: Loading hard mask - {mask}')
     LoadMask(inst,mask,OutputWorkspace=mask)
 else:
