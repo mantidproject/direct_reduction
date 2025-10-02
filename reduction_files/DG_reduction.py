@@ -352,10 +352,10 @@ for irun in sample:
             tryload(irun)
             print(f'Loading run# {irun}')
 
-    try:
-        ws = NormaliseByCurrent('ws')
-    except RuntimeError:
-        pass
+    # Fixes the current if it's been corrupted by a bug in Mantid
+    if mtd['ws'].getRun().getLogData('gd_prtn_chrg').value == 0:
+        AddSampleLog('ws', 'gd_prtn_chrg', str(np.sum(mtd['ws'].getRun().getLogData('proton_charge').value)), 'Number')
+    ws = NormaliseByCurrent('ws')
     if sumruns and sumruns_savemem:
         ws = CompressEvents(ws, Tolerance=1e-5)  # Tolerance in microseconds
 
