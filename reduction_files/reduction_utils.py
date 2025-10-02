@@ -477,7 +477,8 @@ def controt_fill_in_log(ws_full, cs_block):
     print('## Reconstructing log by interpolation, this can take up to a minute.')
     onesec = np.timedelta64(1, 's')
     logval = ws_full.getRun().getLogData(cs_block)
-    logs = [[logval.filtered_times[ii], logval.filtered_value[ii]] for ii in range(logval.size())]
+    start = ws_full.getRun().startTime().to_datetime64()
+    logs = [[logval.times[ii], logval.value[ii]] for ii in range(len(logval.value)) if logval.times[ii] > start]
     AddTimeSeriesLog(ws_full, cs_block, str(logs[0][0]), logs[0][1], DeleteExisting=True)
     for ii in range(len(logs)-1):
         tdif, vdif = (logs[ii+1][0] - logs[ii][0], logs[ii+1][1] - logs[ii][1])
