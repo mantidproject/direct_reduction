@@ -268,14 +268,13 @@ if is_auto(Ei_list) or hasattr(Ei_list, '__iter__') and is_auto(Ei_list[0]):
     try:
         Ei_list = autoei(ws)
     except (NameError, RuntimeError) as e:
-        fn = str(sample[0])
-        if not fn.startswith(inst[:3]): fn = f'{inst[:3]}{fn}'
-        if fn.endswith('.raw'): fn = fn[:-4]
-        if fn[-4:-2] == '.s': fn = fn[:-4] + '.n0' + fn[-2:]
-        if not fn.endswith('.nxs') and fn[-5:-2] != '.n0': fn += '.nxs'
-        ws_tmp_mons = LoadNexusMonitors(fn, OutputWorkspace='ws_tmp_mons')
-        Ei_list = autoei(ws_tmp_mons)
-    if not Ei_list:
+        fn = str(sample[0]).split(inst[:3])[-1].replace('.raw', '.nxs').replace('.s','.n0')
+        try:
+            ws_tmp_mons = LoadNexusMonitors(fn, OutputWorkspace='ws_tmp_mons')
+            Ei_list = autoei(ws_tmp_mons)
+        except:
+            pass
+    if not Ei_list and mv_file is not None:
         raise RuntimeError(f'Invalid run(s) {sample}. Chopper(s) not running ' \
                             'or could not determine neutron energy')
     print(f"Automatically determined Ei's: {Ei_list}")
@@ -309,7 +308,7 @@ if mv_file is not None and monovan_mass is not None:
         mv_fac.append(mvf)
 else:
     print(f'{inst}: Skipping absolute calibration')
-    mv_fac = [x/x for x in Ei_list]     # monovan factors = 1 by default
+    mv_fac = [1.0 for x in Ei_list]     # monovan factors = 1 by default
 
 # =====================angles cache stuff====================================
 if utils_loaded:
