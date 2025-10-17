@@ -413,7 +413,10 @@ def autoei(ws):
         reps = [d-disk for d in slots]
         eis_disk = {((2286.26*lmc) / (delay_calc + s*2500.))**2 for s in reps}
         period = period / 2. if 'G' in chopper_type.upper() else period
-        eis = {((2286.26*lmc) / (delay_calc + s*period))**2 for s in range(-10, 10)}
+        eis = {((2286.26*lmc) / (delay_calc + s*period))**2 for s in range(-10, 10) if (delay_calc+s*period) > 0}
+        # If disk is off, assume open and let all reps through
+        if abs(mode(getLog('Freq_Thick_1'))) < 1:
+            eis_disk = [ei for ei in eis if ei > (2.9 if 'G' in chopper_type.upper() else 40)]
         inrange = lambda x: (x > 1 and x < 2.9) or (x > 4 and x < 1000)
         return [roundlog10(ei) for ei in np.sort(list(eis.intersection(eis_disk)))[::-1] if inrange(ei)]
 
