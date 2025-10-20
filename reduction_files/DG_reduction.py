@@ -94,7 +94,7 @@ if inst == 'MARI':
     same_angle_action = 'ignore'
 elif inst == 'MERLIN':
     source = 'undulator'
-    m2spec = 69636              # specID of monitor2 (pre-sample)
+    m2spec = 69634              # specID of monitor2 (pre-sample)
     m3spec = 69640              # specID of monitor3 (post-sample)
     #monovan_mass = 32.62       # mass of vanadium cylinder
 elif inst == 'MAPS':
