@@ -26,6 +26,8 @@ def rename_existing_ws(ws_name):
             mon_list = []
         if len(mon_list) > 0:
             ExtractMonitors(ws_name, DetectorWorkspace='ws', MonitorWorkspace='ws_monitors')
+            if np.max(mtd['ws_monitors'].readX(0)) < 0.1:
+                _create_dummy_monitors(ws_name)
         else:
             _get_mon_from_history(ws_name)
     else:
@@ -55,7 +57,7 @@ def _get_mon_from_history(ws_name):
     CloneWorkspace(ws_mon_name, OutputWorkspace='ws_monitors')
 
 MONDAT = {
-    'MERLIN': {'ws':range(69633, 69642), 'l2':[3.258]+[1.504]*4+[4.247]*4, 'th':[180]*5+[0]*4},
+    'MERLIN': {'ws':range(69632, 69641), 'l2':[3.258]+[1.504]*4+[4.247]*4, 'th':[180]*5+[0]*4},
     'MAPS': {'ws':range(36864, 36868), 'l2':[4.109,2.805,1.716,8.35], 'th':[180]*3+[0]},
     'LET': {'ws':range(98304,98312), 'l2':[17.758, 17.06, 16.558, 13.164, 9.255, 1.333, 1.088, 1.088], 'th':[180]*8}
 }
@@ -127,7 +129,10 @@ def copy_inst_info(outfile, in_ws):
     en0 = mtd[in_ws].getEFixed(mtd[in_ws].getDetector(0).getID())
     with h5py.File(raw_file_name, 'r') as raw:
         exclude = ['dae', 'detector_1', 'name']
-        to_copy = set([k for k in raw['/raw_data_1/instrument'] if not any([x in k for x in exclude])])
+        try:
+            to_copy = set([k for k in raw['/raw_data_1/instrument'] if not any([x in k for x in exclude])])
+        except KeyError:  # Live data file
+            return
         if 'aperture' not in to_copy and 'mono_chopper' not in to_copy:
             return
         reps = [k for k in to_copy if k.startswith('rep_')]

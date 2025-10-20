@@ -353,9 +353,13 @@ for irun in sample:
             print(f'Loading run# {irun}')
 
     # Fixes the current if it's been corrupted by a bug in Mantid
-    if mtd['ws'].getRun().getLogData('gd_prtn_chrg').value == 0:
-        AddSampleLog('ws', 'gd_prtn_chrg', str(np.sum(mtd['ws'].getRun().getLogData('proton_charge').value)), 'Number')
-    ws = NormaliseByCurrent('ws')
+    try:
+        if mtd['ws'].getRun().getLogData('gd_prtn_chrg').value == 0:
+            AddSampleLog('ws', 'gd_prtn_chrg', str(np.sum(mtd['ws'].getRun().getLogData('proton_charge').value)), 'Number')
+        ws = NormaliseByCurrent('ws')
+    except RuntimeError:
+        print(f'{inst}: WARNING: Could not normalise run. No integrated current found or current is zero')
+        ws = mtd['ws']
     if sumruns and sumruns_savemem:
         ws = CompressEvents(ws, Tolerance=1e-5)  # Tolerance in microseconds
 
@@ -382,9 +386,12 @@ for irun in sample:
         t_shift = 20000 if inst == 'MARI' and origEi < 3.1 else 0
 
         tofs = ws.readX(0)
-        tof_min = np.sqrt(l1**2 * 5.227e6 / Ei) - t_shift
-        tof_max = tof_min + np.sqrt(l2**2 * 5.226e6 / (Ei*(1-Erange[-1])))
-        ws_rep = CropWorkspace(ws, max(min(tofs), tof_min), min(max(tofs), tof_max))
+        if np.max(tofs) < 0.1 and isinstance(ws, mantid.dataobjects.EventWorkspace): # Probably live data don't crop
+            ws_rep = CloneWorkspace(ws)
+        else:
+            tof_min = np.sqrt(l1**2 * 5.227e6 / Ei) - t_shift
+            tof_max = tof_min + np.sqrt(l2**2 * 5.226e6 / (Ei*(1-Erange[-1])))
+            ws_rep = CropWorkspace(ws, max(min(tofs), tof_min), min(max(tofs), tof_max))
 
         if sample_cd is not None:
             print(f'... subtracting Cd background')
