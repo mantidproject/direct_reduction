@@ -48,7 +48,7 @@ def _get_mon_from_history(ws_name):
         raise RuntimeError(f'Cannot find original file from workspace {ws_name} to load logs from')
     try:
         LoadEventNexus(orig_file, SpectrumMax=10, LoadMonitors=True, OutputWorkspace='tmp_mons')
-    except TypeError:
+    except (TypeError, ValueError) as err:
         LoadRaw(orig_file, SpectrumMax=10, LoadMonitors='Separate', OutputWorkspace='tmp_mons')
     ws_mon_name = f'{ws_name}_monitors'
     RenameWorkspace('tmp_mons_monitors', ws_mon_name)

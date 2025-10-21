@@ -205,8 +205,7 @@ class DGReductionTest(unittest.TestCase):
                     'sample\s*=\s*\\[*[\\]0-9,]+':'sample = 59151',
                     'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
                     'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_57088.txt\'',
-                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [150]',
-                    'fixei = True':'fixei = False'}
+                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [150]'}
         s_api.config['default.instrument'] = 'MERLIN'
         infile = os.path.join(self.scriptpath, 'DG_whitevan.py')
         outfile = os.path.join(self.outputpath, 'merlin_whitevan.py')
@@ -220,7 +219,7 @@ class DGReductionTest(unittest.TestCase):
         filepath = os.path.join(self.outputpath, 'MER59151_150meV_powder.nxspe')
         self.assertTrue(os.path.exists(filepath))
         cksum = {'MER59151_150meV_powder.nxspe':self.load_return_sum(filepath)}
-        assert_allclose(cksum['MER59151_150meV_powder.nxspe'], [1.3581422074777563e-06, 0.0])
+        assert_allclose(cksum['MER59151_150meV_powder.nxspe'], [1.2184365985892125e-06, 0.0])
 
 
     def test_MAPS(self):

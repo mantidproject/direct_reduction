@@ -252,8 +252,8 @@ if cs_block and cs_bin_size > 0:
     print(f'... N={bval_nbins} bins with {bval_remainder:.2f} {unit} remainder')
 if cs_conv_to_md:
     powder = False
-    assert(all([v in cs_conv_pars for v in ['lattice_pars', 'lattice_ang', 'u', 'v', 'psi0']]),
-        'Conversion to MDWorkspace needs parameters: "lattice_pars", "lattice_ang", "u", "v", "psi0"')
+    assert all([v in cs_conv_pars for v in ['lattice_pars', 'lattice_ang', 'u', 'v', 'psi0']]), \
+        'Conversion to MDWorkspace needs parameters: "lattice_pars", "lattice_ang", "u", "v", "psi0"'
 
 # =======================sum sample runs if required=========================
 sumsuf = sumruns and len(sample) > 1
@@ -412,8 +412,7 @@ for irun in sample:
         print('... t2e section')
         ws_monitors = mtd['ws_monitors']
         spectra = ws_monitors.getSpectrumNumbers()
-        index = spectra.index(m2spec)
-        m2pos = ws.detectorInfo().position(index)[2]
+        m2pos = ws.detectorInfo().position(spectra.index(m2spec))[2]
 
         if inst == 'MARI' and utils_loaded and origEi < 4.01:
             # Shifts data / monitors into second frame for MARI
