@@ -26,6 +26,8 @@ def rename_existing_ws(ws_name):
             mon_list = []
         if len(mon_list) > 0:
             ExtractMonitors(ws_name, DetectorWorkspace='ws', MonitorWorkspace='ws_monitors')
+            if np.max(mtd['ws_monitors'].readX(0)) < 0.1:
+                _create_dummy_monitors(ws_name)
         else:
             _get_mon_from_history(ws_name)
     else:
@@ -45,9 +47,9 @@ def _get_mon_from_history(ws_name):
     if orig_file is None:
         raise RuntimeError(f'Cannot find original file from workspace {ws_name} to load logs from')
     try:
-        Load(orig_file, SpectrumMax=10, LoadMonitors=True, OutputWorkspace='tmp_mons')
-    except TypeError:
-        Load(orig_file, SpectrumMax=10, LoadMonitors='Separate', OutputWorkspace='tmp_mons')
+        LoadEventNexus(orig_file, SpectrumMax=10, LoadMonitors=True, OutputWorkspace='tmp_mons')
+    except (TypeError, ValueError) as err:
+        LoadRaw(orig_file, SpectrumMax=10, LoadMonitors='Separate', OutputWorkspace='tmp_mons')
     ws_mon_name = f'{ws_name}_monitors'
     RenameWorkspace('tmp_mons_monitors', ws_mon_name)
     DeleteWorkspace('tmp_mons')
@@ -55,7 +57,7 @@ def _get_mon_from_history(ws_name):
     CloneWorkspace(ws_mon_name, OutputWorkspace='ws_monitors')
 
 MONDAT = {
-    'MERLIN': {'ws':range(69633, 69642), 'l2':[3.258]+[1.504]*4+[4.247]*4, 'th':[180]*5+[0]*4},
+    'MERLIN': {'ws':range(69632, 69641), 'l2':[3.258]+[1.504]*4+[4.247]*4, 'th':[180]*5+[0]*4},
     'MAPS': {'ws':range(36864, 36868), 'l2':[4.109,2.805,1.716,8.35], 'th':[180]*3+[0]},
     'LET': {'ws':range(98304,98312), 'l2':[17.758, 17.06, 16.558, 13.164, 9.255, 1.333, 1.088, 1.088], 'th':[180]*8}
 }
@@ -127,7 +129,10 @@ def copy_inst_info(outfile, in_ws):
     en0 = mtd[in_ws].getEFixed(mtd[in_ws].getDetector(0).getID())
     with h5py.File(raw_file_name, 'r') as raw:
         exclude = ['dae', 'detector_1', 'name']
-        to_copy = set([k for k in raw['/raw_data_1/instrument'] if not any([x in k for x in exclude])])
+        try:
+            to_copy = set([k for k in raw['/raw_data_1/instrument'] if not any([x in k for x in exclude])])
+        except KeyError:  # Live data file
+            return
         if 'aperture' not in to_copy and 'mono_chopper' not in to_copy:
             return
         reps = [k for k in to_copy if k.startswith('rep_')]
@@ -398,7 +403,7 @@ def autoei(ws):
             ei_nominal = ((2286.26 * lmc) / delay)**2
         sqrt_ei = np.sqrt(ei_nominal)
         delay_calc = ((2286.26 * lmc) / sqrt_ei)
-        t_offset_ref = {'S':2033.3/freq-5.4, 'G':1339.9/freq-7.3}
+        t_offset_ref = {'S':2033.3/freq-5.4, 'G':1339.9/freq-7.3, 'A':-4790.69/freq+17.7}
         t_offset = delay - (delay_calc % period)
         chopper_type = min(t_offset_ref.keys(), key=lambda x:np.abs(t_offset - t_offset_ref[x]))
         nom_disk1, nom_disk2 = (((2286.26 * l) / sqrt_ei) - c for l, c in zip([7.861, 7.904], [5879., 6041.]))
@@ -406,14 +411,17 @@ def autoei(ws):
         disk_delta = delt_disk2 - delt_disk1
         slots_delta = np.round(disk_delta / 202.11) / 10
         assert slots_delta % 1.0 < 0.2, 'Bad slots calculation'
-        slots = {0:[0,1,2,4], 1:[0,1], 2:[0,2], 3:[0], 4:[0]}[abs(int(slots_delta))]
+        slots = {0:[0,1,2,4], 1:[0,1], 2:[0,2], 3:[0], 4:[0]}[abs(int(round(slots_delta)))]
         disk_ref = 6 - (np.round(delt_disk1 / 202.11) / 10)
         assert disk_ref % 1.0 < 0.2, f'Bad disk calculation'
-        disk = {0:disk_ref, 1:disk_ref-1, 2:1 if disk_ref==2 else 0, 3:0, 4:0}[abs(int(slots_delta))]
+        disk = {0:disk_ref, 1:disk_ref-1, 2:1 if disk_ref==2 else 0, 3:0, 4:0}[abs(int(round(slots_delta)))]
         reps = [d-disk for d in slots]
         eis_disk = {((2286.26*lmc) / (delay_calc + s*2500.))**2 for s in reps}
         period = period / 2. if 'G' in chopper_type.upper() else period
-        eis = {((2286.26*lmc) / (delay_calc + s*period))**2 for s in range(-10, 10)}
+        eis = {((2286.26*lmc) / (delay_calc + s*period))**2 for s in range(-10, 10) if (delay_calc+s*period) > 0}
+        # If disk is off, assume open and let all reps through
+        if abs(mode(getLog('Freq_Thick_1'))) < 1:
+            eis_disk = [ei for ei in eis if ei > (2.9 if 'G' in chopper_type.upper() else 40)]
         inrange = lambda x: (x > 1 and x < 2.9) or (x > 4 and x < 1000)
         return [roundlog10(ei) for ei in np.sort(list(eis.intersection(eis_disk)))[::-1] if inrange(ei)]
 
@@ -468,6 +476,29 @@ def autoei(ws):
 
     else:
         raise RuntimeError(f'Instrument {inst} not supported')
+
+
+#========================================================
+# Continuous rotation routines
+def controt_fill_in_log(ws_full, cs_block):
+    print('## Continuous rotation log interval larger than 1s!')
+    print('## Reconstructing log by interpolation, this can take up to a minute.')
+    onesec = np.timedelta64(1, 's')
+    logval = ws_full.getRun().getLogData(cs_block)
+    start = ws_full.getRun().startTime().to_datetime64()
+    logs = [[logval.times[ii], logval.value[ii]] for ii in range(len(logval.value)) if logval.times[ii] > start]
+    AddTimeSeriesLog(ws_full, cs_block, str(logs[0][0]), logs[0][1], DeleteExisting=True)
+    for ii in range(len(logs)-1):
+        tdif, vdif = (logs[ii+1][0] - logs[ii][0], logs[ii+1][1] - logs[ii][1])
+        if tdif > onesec and abs(vdif) > 0:
+            newstep = int(tdif / onesec)
+            v0 = logs[ii][1]
+            vdif = vdif / newstep
+            for jj in range(1, newstep):
+                tim = logs[ii][0] + onesec*jj
+                AddTimeSeriesLog(ws_full, cs_block, str(tim), v0 + vdif*jj)
+        else:
+            AddTimeSeriesLog(ws_full, cs_block, str(logs[ii][0]), logs[ii][1])
 
 
 #========================================================
@@ -535,6 +566,17 @@ def run_whitevan(**kwargs):
 def run_monovan(**kwargs):
     run_reduction(mod='monovan', **kwargs)
 
+def _tryload(runno):
+    if isinstance(runno, str) and os.path.exists(runno):
+        print(f'{runno} file exists - pre-loading.')
+        outname = os.path.basename(runno).split('.')[0]
+        try:
+            Load(runno, OutputWorkspace=outname, LoadMonitors=True)
+        except TypeError:
+            Load(runno, OutputWorkspace=outname, LoadMonitors='Separate')
+        return outname
+    return runno
+
 def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=False, **kwargs):
     wv_name = wbvan if (isinstance(wbvan, (str, int, float)) or len(wbvan)==1) else wbvan[0]
     wv_file = f'WV_{wv_name}.txt'
@@ -570,4 +612,5 @@ def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=
         kwargs['sample_mass'] = sam_mass
         kwargs['sample_fwt'] = sam_rmm
         kwargs['mv_file'] = mv_file
+    runno = [_tryload(r) for r in runno] if isinstance(runno, list) else _tryload(runno)
     run_reduction(sample=runno, Ei_list=ei if hasattr(ei, '__iter__') else [ei], wv_file=wv_file, **kwargs)
