@@ -466,8 +466,8 @@ def autoei(ws):
                     freq = mode(getLog('In:Merlin:Fermchop_01:Speed.Val'))
                 except ValueError:
                     freq = 400.
-                    tof = (2286.26 * lmc) / np.sqrt(roundlog10(((2286.26 * lmc) / (delay - 6483/freq + 5.5))**2))
-                    return [roundlog10(((2286.26*lmc) / tf)**2) for tf in [(tof + s*period) for s in range(-10, 10)] if tf > 1500 and tf < tfmx]
+                tof = (2286.26 * lmc) / np.sqrt(roundlog10(((2286.26 * lmc) / (delay - 6483/freq + 5.5))**2))
+                return [roundlog10(((2286.26*lmc) / tf)**2) for tf in [(tof + s*period) for s in range(-10, 10)] if tf > 1500 and tf < tfmx]
         delay = getfracLog('Chopper_Delay')
         disk_delay = mode(getLog('Disc_Delay'))
         rrm_mode = np.abs(disk_delay - 13700) < 10 or np.abs(disk_delay - 12400) < 10
