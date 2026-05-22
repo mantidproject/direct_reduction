@@ -622,47 +622,48 @@ def iliad(runno, ei, wbvan, monovan=None, sam_mass=None, sam_rmm=None, sum_runs=
 #
 #   Routines used in DG_PLET-calibration and DG_PLET-analysis  scripts
 #   
-#                                              JRS, Gino Cassella and Gøran Nilsen
-#                                              14/11/25
+#   JRS, Gino Cassella and Gøran Nilsen 14/11/25
+#   JRS 18/5/26
 #=================================================================================
 
 from mantid import *
 from mantid.simpleapi import *
 from scipy.optimize import curve_fit
 import numpy as np
-import os
+import matplotlib.pyplot as pyplot
 
-class Reduce():
+#---------------------------------------------------------------------------
+
+class PLET_reduce():
     def __init__ (self, sample, energies, PF,
-                  he_pressure = 0.75,
-                  he_path_length = 0.06,
-                  he_mode = 'direct',
-                  polmon_distance = 25.39,
-                  polmon_delay = 100,
+                  he_pressure     = 0.9,      # in bar
+                  he_path_length  = 0.06,     # in metres
+                  he_mode         = 'direct', # either 'direct' or 'fit' - 'direct' takes 3He polarization straight from monitor, 'fit' fits to an exponential decay - 'direct' only recommended for short runs
+                  polmon_distance = 25.39,    # in metres
+                  polmon_delay    = 100,      # in microseconds
                   polmon_spectrum = 98311,
-                  p0 = np.array([0.85,0.90,0.90,0.5]),
-                  name_format = 'LET{0}_{1:g}meV_1to1.nxs',
-                  nxsdir = '',
-                  label = '',
-                  mask = None,
-                  rings_map = None,
-                  NSF_first = False,
-                  separate = False,
-                  sum_runs = True,
-                  event_mode = True
+                  name_format     = 'LET{0}_{1:g}meV_1to1',
+                  file_format     = '.nxs',
+                  datadir         = '',
+                  label           = '',
+                  mask            = None,
+                  rings_map       = None,
+                  NSF_first       = False,
+                  separate        = False,
+                  sum_runs        = True,
+                  event_mode      = True
                   ):
 
         self.energies = energies
         self.sample_runs = sample
         self.PF = PF
-        self.he_pressure = he_pressure          # in bar
-        self.he_path_length = he_path_length    # in metres
-        self.he_mode = he_mode                  # either 'direct' or 'fit' - 'direct' takes 3He polarization straight from monitor, 'fit' fits to an exponential decay - 'direct' only recommended for short runs
-        self.polmon_distance = polmon_distance  # in metres
-        self.polmon_delay = polmon_delay        # in microsecs
+        self.he_pressure = he_pressure          
+        self.he_path_length = he_path_length    
+        self.he_mode = he_mode
+        self.polmon_distance = polmon_distance 
+        self.polmon_delay = polmon_delay
         self.polmon_spectrum = polmon_spectrum
         self.polmon_wsindex = polmon_spectrum-98305
-        self.p0 = p0
         self.NSF_first = NSF_first
         self.separate = separate
         self.sum_runs = sum_runs
@@ -671,28 +672,113 @@ class Reduce():
         self.mask = mask
         self.rings_map = rings_map
         self.name_format = name_format
-        self.nxsdir = nxsdir
+        self.file_format = file_format
+        self.datadir = datadir
 
-#=================================================================================
 #---------------------------------------------------------------------------
 
     def generate_dummy(self, run, ei):
         """Clears out a workspace with the correct dimensions to be used
            as an empty workspace that can be cloned and populated"""
-        print("      ... Generating dummy workspace...")
-        Dummy = LoadNexus(self.nxsdir + self.name_format.format(run, ei))
+        if (self.file_format == ".nxspe"):
+            Dummy = LoadNXSPE(self.datadir + self.name_format.format(run, ei) + self.file_format)
+        else:
+            Dummy = LoadNexus(self.datadir + self.name_format.format(run, ei) + self.file_format)
         DummyWorkspace = mtd['Dummy']*0.0
         self.DummyWorkspace = mtd['DummyWorkspace']
         DeleteWorkspace(Dummy)
 
-#=================================================================================
+#---------------------------------------------------------------------------
+    def get_PF_from_monitor(self,PHe=0.6):
+        """Calculates PF from the PolMon counts for each Ei in the run,
+           assuming a given PHe (0.6 by default)
+           Found not to be reliable for higher energies.
+        """
+        # read in NSF and SF monitors and totalize
+        for run in self.sample_runs[::2]:
+            if self.NSF_first:
+                NSF_run = run
+                SF_run = run + 1
+            else:
+                NSF_run = run + 1
+                SF_run = run
+
+            print("Loading runs {0} (NSF) and {1} (SF)".format(NSF_run,SF_run))
+                
+#load monitors and calculate flipping ratios
+            if self.event_mode:
+                NSF_monitors = LoadNexusMonitors("LET000{0}.nxs".format(NSF_run))
+                SF_monitors  = LoadNexusMonitors("LET000{0}.nxs".format(SF_run))
+            else:
+                print('Warning: histogram mode!')
+                NSF_monitors = LoadNexus("LET000{0}.nxs".format(NSF_run),self.polmon_spectrum,self.polmon_spectrum)
+                SF_monitors  = LoadNexus("LET000{0}.nxs".format(SF_run),self.polmon_spectrum,self.polmon_spectrum)
+            
+            NSF_monitors = NormaliseByCurrent(NSF_monitors,RecalculatePCharge=True)
+            SF_monitors  = NormaliseByCurrent(SF_monitors,RecalculatePCharge=True)
+
+            if (run == self.sample_runs[0]):
+                NSF_total = CloneWorkspace(NSF_monitors)
+                SF_total  = CloneWorkspace(SF_monitors)
+
+            NSF_total += NSF_monitors
+            SF_total  += SF_monitors  
+        
+        for ei in self.energies:
+            wl = 9.045 / np.sqrt(ei)
+            TOF = 251.9 * wl * self.polmon_distance + self.polmon_delay
+            A = np.tanh(PHe *7.33*wl*self.he_path_length*self.he_pressure)
+            
+# Integrate the monitors over the appropriate TOF     
+            if self.event_mode:
+                NSF_int = Integration(NSF_monitors,RangeLower=TOF-100,RangeUpper=TOF+100,StartWorkspaceIndex=self.polmon_wsindex)                                      
+                SF_int  = Integration(SF_monitors, RangeLower=TOF-100,RangeUpper=TOF+100,StartWorkspaceIndex=self.polmon_wsindex)
+            else:
+                NSF_int = Integration(NSF_monitors,RangeLower=TOF-1000,RangeUpper=TOF+1000)
+                SF_int = Integration(SF_monitors,  RangeLower=TOF-1000,RangeUpper=TOF+1000)
+            
+            FAP = (NSF_int - SF_int) / (NSF_int + SF_int)
+            PF   = FAP.readY(0)[0] / A
+           
+            PFe = PF * FAP.readE(0)[0] / FAP.readY(0)[0]
+            
+            print(f'Ei = {ei} meV, analyser power A={A}:   PF = {PF:.2f} ± {PFe:.3f}')         
+
 #---------------------------------------------------------------------------
 
     def get_PF_from_quartz(self): 
         """Calculates PF (product of polariser and flipper efficiencies) using the out of plane
            angular dependence of the flipping ratio of quartz through the 3He analyser. Several
-           Ei are required to generate a reliable set of PF"""
+           Ei are required to generate a reliable set of PF
+           
+           This only works with NXSPE files at the moment.
+           Only gives reliable results when the Ei is high enough to cover most of S(Q) and get reliable counts
+           
+           Needs modifying to take account of background scattering (which is especially important for SF)
+           """
+           
+        print('\nStarting get_PF_from_quartz() ---')
 
+        if (self.file_format != '.nxspe'):
+            print("get_PF_from_quartz: doesn't work with .nxs files as input")
+            exit()
+
+# neutron polarization vs. gamma  - Functions
+        def FAP_gamma(gamma,wl,PF,PHe):
+            return  PF*np.tanh(7.33*wl*self.he_path_length*self.he_pressure*PHe*(1.0/np.cos(gamma)))
+    
+        def FAP_fit(gamma, *params):
+            y_fit = np.array([])
+            PHe = params[-1]
+            gg = int(len(gamma)/len(self.energies))
+            
+            for i in range(len(self.energies)):
+                PF = params[i]
+                extract = gamma[i*gg:(i+1)*gg]
+                y_fit = np.append(y_fit,FAP_gamma(extract,wl[i],PF,PHe))
+            return y_fit
+
+# define arrays
         FAP_tofit = np.array([])
         FAP_tofite = np.array([])
         gamma = np.array([])
@@ -707,7 +793,6 @@ class Reduce():
 
 # array of out-of-plane angles
             gamma = np.append(gamma,np.deg2rad(np.linspace(-30,30,num=256)))
-            
             print("****************************************")        
 
 # read in NSF and SF quartz and totalize
@@ -720,18 +805,22 @@ class Reduce():
                     SF_run = run
 
                 print("Loading quartz runs {0} (NSF) and {1} (SF) at {2:<3.2f}meV".format(NSF_run,SF_run, ei))
-                NSF_quartz = LoadNXSPE(self.name_format.format(NSF_run, ei))
-                SF_quartz  = LoadNXSPE(self.name_format.format(SF_run, ei))
-                
-                NSF_quartz_total += NSF_quartz
-                SF_quartz_total  += SF_quartz 
+                NSF_quartz = LoadNXSPE(self.name_format.format(NSF_run, ei) + self.file_format)
+                SF_quartz  = LoadNXSPE(self.name_format.format(SF_run, ei) + self.file_format)
+# mask lower angle detectors where Quartz scattering is low, and background high                
+                MaskDetectors(NSF_quartz,WorkspaceIndexList=list(range(60000)))
+                MaskDetectors(SF_quartz,WorkspaceIndexList=list(range(60000)))
 
-            if (not "Masking" in mtd) and (self.mask is not none):
+                NSF_quartz_total += NSF_quartz
+                SF_quartz_total  += SF_quartz  
+
+            if (not "Masking" in mtd) and (self.mask is not None):
                 LoadMask('let',InputFile=self.mask,RefWorkspace=NSF_quartz_total,OutputWorkspace='Masking')
 
 # integrate over the elastic line and mask
             NSF_quartz_total = Integration(NSF_quartz_total,RangeLower=-ei*0.03,RangeUpper=ei*0.03)
             SF_quartz_total  = Integration(SF_quartz_total, RangeLower=-ei*0.03,RangeUpper=ei*0.03)
+            
             if "Masking" in mtd:
                 MaskDetectors(NSF_quartz_total, MaskedWorkspace='Masking')
                 MaskDetectors(SF_quartz_total,  MaskedWorkspace='Masking')
@@ -745,61 +834,56 @@ class Reduce():
             FAP_tofit  = np.append(FAP_tofit,FAP.extractY()[0])
             FAP_tofite = np.append(FAP_tofite,FAP.extractE()[0])
 
-# neutron polarization vs. gamma            
-        
-        def FAP_gamma(gamma,wl,PF,PHe):
-            return  PF*np.tanh(7.33*wl*self.he_path_length*self.he_pressure*PHe*(1.0/np.cos(gamma)))
-            
-        def FAP_fit(gamma, *params):
-            y_fit = np.array([])
-            PHe = params[-1]
-            gg = int(len(gamma)/len(self.energies))
-            
-            for i in range(len(self.energies)):
-                PF = params[i]
-                extract = gamma[i*gg:(i+1)*gg]
-                y_fit = np.append(y_fit,FAP_gamma(extract,wl[i],PF,PHe))
-            
-            return y_fit
-
 # Only fit to values where our secant approximations holds well and with physically meaningful numbers
 # of counts
-        indices = np.logical_and((np.abs(gamma) > 0.01),(np.abs(gamma) < 0.3))
+        indices = np.logical_and((np.abs(gamma) > 0.01),(np.abs(gamma) < 0.35))
         indices = np.logical_and((FAP_tofit > 0.), indices)
+        good_gamma = gamma[indices]
 
-        import matplotlib.pyplot as pyplot
-        fig,ax = pyplot.subplots()
-        ax.plot(gamma[indices],FAP_tofit[indices])
-        popt, pcov = curve_fit(FAP_fit, gamma[indices], FAP_tofit[indices],p0=self.p0, sigma=FAP_tofite[indices],bounds=(0.9*self.p0,1.1*self.p0))
-        fit_y = FAP_fit(gamma[indices],popt[0],popt[1],popt[2],popt[3])
-        ax.plot(gamma[indices],fit_y)
-        pyplot.show()
+# parameters to fit are PF for each energy and PHe
+        params = np.zeros_like(self.energies) + 0.9
+        params = np.append(params,0.6)
+        popt, pcov = curve_fit(FAP_fit,good_gamma,FAP_tofit[indices],p0=params,sigma=FAP_tofite[indices],bounds=(0.9*params,1.1*params))
+        fit_y = FAP_fit(good_gamma,*popt)
 
-        PF = np.zeros_like(self.energies)
-        PFe = PF
-        PHe = popt[-1]
+# get PF, PHe and errors
+        PF   = popt[:-1]
+        PHe  = popt[-1]
+        PFe  = np.sqrt(np.diag(pcov))[:-1]
         PHee = np.sqrt(np.diag(pcov))[-1]
 
-        print("****************************************")
+# plot the fits
+        pyplot.errorbar(gamma[indices],FAP_tofit[indices],yerr=FAP_tofite[indices],fmt='o')
+        gg = int(len(good_gamma)/len(self.energies))
+        ei_text = ''
+        for i in range(len(self.energies)):
+            gamma_ei = good_gamma[i*gg:(i+1)*gg]
+            fit_ei = fit_y[i*gg:(i+1)*gg]
+            pyplot.plot(gamma_ei, fit_ei)
+            ei_text += f'\nEi={self.energies[i]:.2f} meV, PF={PF[i]:.2f}±{PFe[i]:.3f}'
+        pyplot.title(f"Polarization from quartz counts: {self.sample_runs[0]} to {self.sample_runs[-1]}")
+        pyplot.xlabel("Gamma (rad)")
+        pyplot.ylabel("Polarization")
+        pyplot.ylim(0.4,1)
+        pyplot.figtext(0.5,0.75,f'PHe={PHe:.2f}±{PHee:.3f}'+ei_text,fontsize=8,
+                       bbox={'facecolor':'grey', 'alpha':0.3, 'pad':5})
+        pyplot.gca().set_aspect('equal')
+        pyplot.show()
+
+        print("************PF From Quartz:*************")
         for i in range(len(PF)):
-            PF[i] = popt[i]
-            PFe[i] = np.sqrt(np.diag(pcov))[i]
-            print("PF   = {0:1.3f} +/- {1:1.3f}".format(popt[i], PFe[i]))
-        print("P_He = {0:1.3f} +/- {1:1.3f}".format(PHe, PHee))
+            print(f'Ei={self.energies[i]:.2f} meV, PF={popt[i]:.3f} ± {PFe[i]:.4f}')
+        print(f'P_He={PHe:.3f} ± {PHee:.4f}')
         print("****************************************") 
+        print('\nget_PF_from_quartz() --- complete')
 
-#=================================================================================
 #-------------------------------------------------------------------------------------
-# Finds the initial PHe0 and T1 of a range of runs for a single 3He cell.  If "save" is 
-# True then a calibration file is used by set_helium_parameters.  Otherwise the helium
-# parameters are set and may used by following routines
-
 
     def get_helium_parameters(self, save=False):
-        """Finds the initial PHe0 and T1 of a range of runs for a single 3He cell.  If "save" is 
-           True then a calibration file is used by set_helium_parameters.  Otherwise the helium
-           parameters are set and may used by following routines"""
-
+        """Using PF and the flipping ratio in the straight-thru monitor 
+           determines PHe0 and T1
+        """
+        
         ei = self.energies[0]
         PF = self.PF[0]
         wl = 9.045 / np.sqrt(ei)
@@ -814,7 +898,7 @@ class Reduce():
         PHese = []
         times = []
 
-        print("\nStarting get_helium_parameters...")
+        print("\nStarting get_helium_parameters() ---")
         print("Using {0} meV rep with PF={1}".format(ei,PF))
         print("****************************************************")        
         for run in self.sample_runs[::2]:
@@ -891,43 +975,42 @@ class Reduce():
             self.t0    = t0
             self.times = times
             self.Phes  = PHes
-            he_fit     = exp_decay(times, self.T1, self.PHe0)
-
-# Plot PHe vs t and the fit
+        
+# output debugging workspaces
+            he_fit      = exp_decay(times, self.T1, self.PHe0)
+            
             pyplot.errorbar(np.array(times),np.array(PHes),yerr=np.array(np.abs(PHese)),fmt='o')
             pyplot.plot(np.array(times), np.array(he_fit))
             pyplot.title(f"T1 from cell runs: {self.sample_runs[0]} to {self.sample_runs[-1]}")
             pyplot.xlabel("Time (hours since installation)")
-            pyplot.ylabel("3He polarization")
+            pyplot.ylabel("3He polarization") 
             pyplot.figtext(0.48,0.78,
                 f"PHe0 = {self.PHe0:.3f} ± {self.PHe0e:.4f} \nT1     = {-self.T1:.2f} ±  {self.T1e:.2f} hours",
                 fontsize=12)
             pyplot.show()
 
-# Save out the calibration file
             if save:
                 os.chdir(config["defaultsave.directory"])
                 cal_out = f"3HeCal_{self.sample_runs[0]}-{self.sample_runs[-1]}.txt"
                 file = open(cal_out, "w")
                 print(self.PHe0,-self.T1,self.sample_runs[0], file=file)
                 file.close
+                print(f"\nCell calibration written to {cal_out}")
 
             print("\nInitial Cell polarization P0={0:.3f} ± {1:.4f} with lifetime T1={2:.2f} ± {3:.2f} hours".format(self.PHe0,self.PHe0e,-self.T1,self.T1e))
-            print(f"\nCell calibration written to {cal_out}")
             print("************************************************************************") 
-            
-#=================================================================================
+        
+        print('get_helium_parameters() --- complete')
+        
 #--------------------------------------------------------------------------
-# Sets the 3He cell parameters according to a specified calibration file (written by
-# get_helium_parameters above) or according to explictly given parameters.
 
     def set_helium_parameters(self, cal=None, PHe0=0, T1=0, T0run = 0):
-
-        """Sets the 3He cell parameters according to a specified calibration file (written by
-           get_helium_parameters above) or according to explictly given parameters."""
-
+        """Reads the He cell parameters, either from a calibration file
+           create by get_helium_parameters, or from the command line.
+           Sets the time-stamp for each run in the sequence.
+        """
         times = []
-        print("\nStarting set_helium_parameters...")
+        print("\nStarting set_helium_parameters() ---")
         print("****************************************************")
 
         if cal is not None:
@@ -941,23 +1024,14 @@ class Reduce():
             
         if (PHe0 == 0 or T1 == 0 or T0run == 0):
             print("Must specify 3He parameters directly or in  calibration file")
+        if (self.sample_runs[0] < T0run):
+            print("First run must come after given T0 run")
 
-#load first cell run and extract T0
-        if self.event_mode:
-            NSF_monitors = LoadNexusMonitors("LET000{0}.nxs".format(T0run+1))
-            SF_monitors  = LoadNexusMonitors("LET000{0}.nxs".format(T0run))
-        else:
-            print('Warning: histogram mode!')
-            NSF_monitors = LoadNexus("LET000{0}.nxs".format(T0run+1),self.polmon_spectrum,self.polmon_spectrum)
-            SF_monitors  = LoadNexus("LET000{0}.nxs".format(T0run),self.polmon_spectrum,self.polmon_spectrum)
-            
-        start_time = NSF_monitors.getSampleDetails().startTime().to_datetime64()
-        end_time   =  SF_monitors.getSampleDetails().endTime().to_datetime64()
-        time = start_time + (end_time - start_time)/2.0
-
-        t0 = time
-
-        for run in self.sample_runs[::2]:
+#loop over runs and extract run times
+        runlist = list(self.sample_runs[::2])
+        if (self.sample_runs[0] > T0run):       # add T0run to list if not there already
+            runlist = [T0run] + runlist
+        for run in runlist:
             if self.NSF_first:
                 NSF_run = run
                 SF_run = run + 1
@@ -965,52 +1039,54 @@ class Reduce():
                 NSF_run = run + 1
                 SF_run = run
 
-#load monitors and calculate flipping ratios
-            if self.event_mode:
-                NSF_monitors = LoadNexusMonitors("LET000{0}.nxs".format(NSF_run))
-                SF_monitors  = LoadNexusMonitors("LET000{0}.nxs".format(SF_run))
-            else:
-                print('Warning: histogram mode!')
-                NSF_monitors = LoadNexus("LET000{0}.nxs".format(NSF_run),self.polmon_spectrum,self.polmon_spectrum)
-                SF_monitors  = LoadNexus("LET000{0}.nxs".format(SF_run),self.polmon_spectrum,self.polmon_spectrum)
-            
-            start_time = NSF_monitors.getSampleDetails().startTime().to_datetime64()
-            end_time   =  SF_monitors.getSampleDetails().endTime().to_datetime64()
+#load time logs
+            NSF=CreateWorkspace(DataX=[0],DataY=[0])
+            SF=CreateWorkspace(DataX=[0],DataY=[0])
+            LoadNexusLogs(NSF,"LET000{0}.nxs".format(NSF_run),OverwriteLogs=True,AllowList="start_time")
+            start_time = NSF.getSampleDetails().startTime().to_datetime64()
+            LoadNexusLogs(SF,"LET000{0}.nxs".format(SF_run),OverwriteLogs=True,AllowList="end_time")
+            end_time = SF.getSampleDetails().endTime().to_datetime64()
+
             time = start_time + (end_time - start_time)/2.0
+            if (run == T0run):
+                t0 = time
+                print(f'set_helium_parameters:  First run #{run} measured at {t0}')
+                print('***************************************************')
             time = float((time - t0))*1e-9/60./60.
 
             times.append(time)
-            print(f"Setting run times for NSF:{NSF_run} and SF:{SF_run} to {time:.2f} hours")
-        
+            print(f"Setting run times for NSF:{NSF_run} and SF:{SF_run} to {time:.2f} hours")        
         print(f"Setting PHe_0 = {PHe0:3f} and T1 = {T1:.2f} hours")
 
         self.PHe0 = PHe0
         self.T1 = -T1
         self.times = times
+        print('set_helium_parameters() --- complete')
 
-#=================================================================================
 #--------------------------------------------------------------------------
-# Corrects the data for the time-dependent cell polarization (spin leakage 
-# corrections according to Scharpf/Williams) and time-dependent 3He cell transmission
-
 
     def correct_data(self):
-        """Using PF, PHe0, and T1, calculate the flipping ratio for all (gamma, t) and correct runs,
-           summing and averaging at the end for powder data."""
+        """Uses PF, PHe0, and T1, to calculate the flipping ratio for all 
+           (gamma, t) and corrects runs for finite polarization and cell
+           transmission.
+           Summing and averaging at the end"""
 
         PF_iter = iter(self.PF)
 
         for ei in self.energies:
 
             PF = next(PF_iter)
-            print("****************************************")
-            print("\ncorrect_data: Correcting {0:<3.2f}meV rep with PF={1} \n".format(ei,PF))
-            NSF_out = "PLET_{0}_{1:<3.2f}meV_NSF".format(self.label,ei)
-            SF_out  = "PLET_{0}_{1:<3.2f}meV_SF".format(self.label,ei)   
+            print("\ncorrect_data: Correcting {0:<3.2f}meV rep with PF={1}".format(ei,PF))
+            print("****************************************************")
+
+            NSF_out   = "PLET_{0}_{1:<3.2f}meV_NSF".format(self.label,ei)
+            SF_out    = "PLET_{0}_{1:<3.2f}meV_SF".format(self.label,ei)
+            total_out = "PLET_{0}_{1:<3.2f}meV_total".format(self.label,ei)
 
             self.generate_dummy(self.sample_runs[0],ei)
             NSF_total       = CloneWorkspace(self.DummyWorkspace)
             SF_total        = CloneWorkspace(self.DummyWorkspace)
+            total           = CloneWorkspace(self.DummyWorkspace)
             Scharpf_ws      = CloneWorkspace(self.DummyWorkspace)
             transmission_ws = CloneWorkspace(self.DummyWorkspace)
 
@@ -1038,8 +1114,12 @@ class Reduce():
 
                 print("Correcting runs NSF:{0} and SF:{1} at {2:<3.2f}meV".format(NSF_run,SF_run,ei))
 
-                NSF_One2One = LoadNexus(self.nxsdir + self.name_format.format(NSF_run, ei))
-                SF_One2One  = LoadNexus(self.nxsdir + self.name_format.format(SF_run, ei))   
+                if (self.file_format == '.nxspe'):
+                    NSF_One2One = LoadNXSPE(self.datadir + self.name_format.format(NSF_run, ei) + self.file_format)
+                    SF_One2One  = LoadNXSPE(self.datadir + self.name_format.format(SF_run, ei) + self.file_format)
+                else:
+                    NSF_One2One = LoadNexus(self.datadir + self.name_format.format(NSF_run, ei) + self.file_format)
+                    SF_One2One  = LoadNexus(self.datadir + self.name_format.format(SF_run, ei) + self.file_format)                    
 
 # Calculate FAP, cell transmission and Scharpf correction factor for these runs
 
@@ -1085,20 +1165,24 @@ class Reduce():
                 NSF_total /= len(self.sample_runs[::2])             
                 SF_total  /= len(self.sample_runs[::2])
                 RenameWorkspace(NSF_total,OutputWorkspace=NSF_out)
-                RenameWorkspace(SF_total,OutputWorkspace=SF_out)                
+                RenameWorkspace(SF_total,OutputWorkspace=SF_out)
             
-            print("****************************************")
+            total = NSF_total + SF_total
+            RenameWorkspace(total,OutputWorkspace=total_out)
+            
+        print('correct_data() --- complete')   
 
-#=================================================================================
 #----------------------------------------------------------------------------
-# combines the SF and NSF scattering to obtain the Coherent and Incoherent scattering
 
     def components(self):
+        """Combines the corrected NSF and SF scattering to obtain the
+           coherent and incoherent S(Q,w)
+        """
         
-        """combines the SF and NSF scattering to obtain the Coherent and Incoherent scattering"""
-
         self.separate = True
-        print("Combining components...")
+        print("\nSeparating coherent and incoherent components() ---")
+        print("****************************************************")
+
         for ei in self.energies:
 
             NSF_in  = "PLET_{0}_{1:<3.2f}meV_NSF".format(self.label,ei)
@@ -1114,18 +1198,23 @@ class Reduce():
 
             RenameWorkspace(coh,OutputWorkspace=coh_out)
             RenameWorkspace(inc,OutputWorkspace=inc_out)
+        
+        print('components() --- complete')
 
-#=================================================================================
 #---------------------------------------------------------------------------
-# Normalises the data for each energy to the level of the incoherent scattering
-#                    **DOESN'T WORK, DO NOT USE**
 
     def norm_inc(self):
+        """Normalises the coherent scattering to the incoherent scattering
         
+           DOESN'T WORK - need to include cross-sections and probably, need
+           to include Debye-Waller factors
+        """
         if not self.separate:
             print("Must separate into components before running norm_inc")
             
-        print("Normalising to the incoherent scattering level...")
+        print("\nStarting norm_inc() ---")
+        print("****************************************************")
+
         for ei in self.energies:
 
             inc_in  = "PLET_{0}_{1:<3.2f}meV_inc".format(self.label,ei)
@@ -1144,57 +1233,68 @@ class Reduce():
             
             RenameWorkspace(coh,OutputWorkspace=coh_in)
             RenameWorkspace(inc,OutputWorkspace=inc_in)
+        
+        print('norm_inc() --- complete')
             
-#=================================================================================
 #---------------------------------------------------------------------------
-# Outputs the data in nxspe or nxs format.  If no rings map is specified, then output
-# is 1to1 format.
 
-    def output(self, type='nxspe'):
-        """Outputs the data in nxspe or nxs format.  If no rings map is specified, then output
-           is 1to1 format.
+    def output(self, type='.nxspe'):
+        """Outputs either rings data or 1to1 data as either NSF/SF
+           or coh/inc (depending on whether components() has been run.
+           Can output nxspe or nxs format.
+           Always includes the total scattering data as output.
         """
-
+        
+        print('\nStarting output() ---')
+        os.chdir(config["defaultsave.directory"])
+        
         if self.rings_map is not None:
             format = "rings"
+            if (self.file_format == '.nxspe'):
+                self.rings_map = 'LET_rings_153.map'
+            print(f'output(): rings grouping using {self.rings_map}')
         else:
             format = "1to1"
-            
-        print(f"Writing {format} {type} files...")
-        
+            print('output(): 1to1 grouping')
+
         if self.separate:
             ext1 = "coh"
             ext2 = "inc"
+            print('Outputting coherent and incoherent S(q,w)')
         else:
             ext1 = "NSF"
             ext2 = "SF"
+            print('Outputting NSF and SF S(q,w)')
+            
+        print(f"Writing {format} {type} files...")
+        print("****************************************************")
 
         for ei in self.energies:
-            NSF_in  = "PLET_{0}_{1:<3.2f}meV_{2}".format(self.label,ei,ext1)
-            SF_in   = "PLET_{0}_{1:<3.2f}meV_{2}".format(self.label,ei,ext2)
-            NSF_out  = "PLET_{0}_{1:<3.2f}meV_{2}_{3}.{4}".format(self.label,ei,ext1,format,type)
-            SF_out   = "PLET_{0}_{1:<3.2f}meV_{2}_{3}.{4}".format(self.label,ei,ext2,format,type)
-            NSF = mtd[NSF_in]
-            SF  = mtd[SF_in]
+            NSF_in    = "PLET_{0}_{1:<3.2f}meV_{2}".format(self.label,ei,ext1)
+            SF_in     = "PLET_{0}_{1:<3.2f}meV_{2}".format(self.label,ei,ext2)
+            total_in  = "PLET_{0}_{1:<3.2f}meV_total".format(self.label,ei)
+            NSF_out   = "PLET_{0}_{1:<3.2f}meV_{2}_{3}{4}".format(self.label,ei,ext1,format,type)
+            SF_out    = "PLET_{0}_{1:<3.2f}meV_{2}_{3}{4}".format(self.label,ei,ext2,format,type)
+            total_out = "PLET_{0}_{1:<3.2f}meV_total_{2}{3}".format(self.label,ei,format,type)
+            NSF   = mtd[NSF_in]
+            SF    = mtd[SF_in]
+            total = mtd[total_in]
             
             if format == "rings":
-                grouped_NSF = GroupDetectors(NSF,MapFile=self.rings_map,PreserveEvents=False,Behaviour='Average')
-                grouped_SF  = GroupDetectors(SF, MapFile=self.rings_map,PreserveEvents=False,Behaviour='Average')
-                if type == "nxspe":
-                    SaveNXSPE(grouped_NSF,Filename=NSF_out,Efixed=ei, KiOverKfScaling=False)
-                    SaveNXSPE(grouped_SF, Filename=SF_out, Efixed=ei, KiOverKfScaling=False)
-                else:
-                    SaveNexus(grouped_NSF, Filename=NSF_out)
-                    SaveNexus(grouped_SF,  Filename=SF_out)
-                    
+                NSF   = GroupDetectors(NSF,   MapFile=self.rings_map,PreserveEvents=False,Behaviour='Average')
+                SF    = GroupDetectors(SF,    MapFile=self.rings_map,PreserveEvents=False,Behaviour='Average')
+                total = GroupDetectors(total, MapFile=self.rings_map,PreserveEvents=False,Behaviour='Average')
+                
+            if type == ".nxspe":
+                    SaveNXSPE(NSF,   Filename=NSF_out,   Efixed=ei, KiOverKfScaling=False)
+                    SaveNXSPE(SF,    Filename=SF_out,    Efixed=ei, KiOverKfScaling=False)
+                    SaveNXSPE(total, Filename=total_out, Efixed=ei, KiOverKfScaling=False)
             else:
-                if type == "nxspe":
-                    SaveNXSPE(NSF, Filename=NSF_out, Efixed=ei, KiOverKfScaling=False)
-                    SaveNXSPE(SF,  Filename=SF_out,  Efixed=ei, KiOverKfScaling=False)
-                else:
-                    SaveNexus(NSF, Filename=NSF_out)
-                    SaveNexus(SF,  Filename=SF_out)
+                    SaveNexus(NSF,   Filename=NSF_out)
+                    SaveNexus(SF,    Filename=SF_out)
+                    SaveNexus(total, Filename=total_out)
 
-#=================================================================================
+        print('output() --- complete')
 #---------------------------------------------------------------------------
+
 
