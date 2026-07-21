@@ -630,7 +630,11 @@ from mantid import *
 from mantid.simpleapi import *
 from scipy.optimize import curve_fit
 import numpy as np
-import matplotlib.pyplot as pyplot
+try:
+    import matplotlib.pyplot as pyplot
+except ModuleNotFoundError:
+    import unittest.mock
+    pyplot = unittest.mock.Mock()
 
 #---------------------------------------------------------------------------
 
@@ -681,9 +685,9 @@ class PLET_reduce():
         """Clears out a workspace with the correct dimensions to be used
            as an empty workspace that can be cloned and populated"""
         if (self.file_format == ".nxspe"):
-            Dummy = LoadNXSPE(self.datadir + self.name_format.format(run, ei) + self.file_format)
+            Dummy = LoadNXSPE(self.datadir + '/' + self.name_format.format(run, ei) + self.file_format)
         else:
-            Dummy = LoadNexus(self.datadir + self.name_format.format(run, ei) + self.file_format)
+            Dummy = LoadNexus(self.datadir + '/' + self.name_format.format(run, ei) + self.file_format)
         DummyWorkspace = mtd['Dummy']*0.0
         self.DummyWorkspace = mtd['DummyWorkspace']
         DeleteWorkspace(Dummy)
@@ -707,12 +711,12 @@ class PLET_reduce():
                 
 #load monitors and calculate flipping ratios
             if self.event_mode:
-                NSF_monitors = LoadNexusMonitors("LET000{0}.nxs".format(NSF_run))
-                SF_monitors  = LoadNexusMonitors("LET000{0}.nxs".format(SF_run))
+                NSF_monitors = LoadNexusMonitors(f"LET{NSF_run:08d}.nxs")
+                SF_monitors  = LoadNexusMonitors(f"LET{SF_run:08d}.nxs")
             else:
                 print('Warning: histogram mode!')
-                NSF_monitors = LoadNexus("LET000{0}.nxs".format(NSF_run),self.polmon_spectrum,self.polmon_spectrum)
-                SF_monitors  = LoadNexus("LET000{0}.nxs".format(SF_run),self.polmon_spectrum,self.polmon_spectrum)
+                NSF_monitors = LoadNexus(f"LET{NSF_run:08d}.nxs",self.polmon_spectrum,self.polmon_spectrum)
+                SF_monitors  = LoadNexus(f"LET{SF_run:08d}.nxs",self.polmon_spectrum,self.polmon_spectrum)
             
             NSF_monitors = NormaliseByCurrent(NSF_monitors,RecalculatePCharge=True)
             SF_monitors  = NormaliseByCurrent(SF_monitors,RecalculatePCharge=True)
@@ -913,12 +917,12 @@ class PLET_reduce():
 
 #load monitors and calculate flipping ratios
             if self.event_mode:
-                NSF_monitors = LoadNexusMonitors("LET000{0}.nxs".format(NSF_run))
-                SF_monitors  = LoadNexusMonitors("LET000{0}.nxs".format(SF_run))
+                NSF_monitors = LoadNexusMonitors(f"LET{NSF_run:08d}.nxs")
+                SF_monitors  = LoadNexusMonitors(f"LET{SF_run:08d}.nxs")
             else:
                 print('Warning: histogram mode!')
-                NSF_monitors = LoadNexus("LET000{0}.nxs".format(NSF_run),self.polmon_spectrum,self.polmon_spectrum)
-                SF_monitors  = LoadNexus("LET000{0}.nxs".format(SF_run),self.polmon_spectrum,self.polmon_spectrum)
+                NSF_monitors = LoadNexus(f"LET{NSF_run:08d}.nxs",self.polmon_spectrum,self.polmon_spectrum)
+                SF_monitors  = LoadNexus(f"LET{SF_run:08d}.nxs",self.polmon_spectrum,self.polmon_spectrum)
             
             NSF_monitors = NormaliseByCurrent(NSF_monitors,RecalculatePCharge=True)
             SF_monitors  = NormaliseByCurrent(SF_monitors,RecalculatePCharge=True)
@@ -1042,9 +1046,9 @@ class PLET_reduce():
 #load time logs
             NSF=CreateWorkspace(DataX=[0],DataY=[0])
             SF=CreateWorkspace(DataX=[0],DataY=[0])
-            LoadNexusLogs(NSF,"LET000{0}.nxs".format(NSF_run),OverwriteLogs=True,AllowList="start_time")
+            LoadNexusLogs(NSF,f"LET{NSF_run:08d}.nxs",OverwriteLogs=True,AllowList="start_time")
             start_time = NSF.getSampleDetails().startTime().to_datetime64()
-            LoadNexusLogs(SF,"LET000{0}.nxs".format(SF_run),OverwriteLogs=True,AllowList="end_time")
+            LoadNexusLogs(SF,f"LET{SF_run:08d}.nxs",OverwriteLogs=True,AllowList="end_time")
             end_time = SF.getSampleDetails().endTime().to_datetime64()
 
             time = start_time + (end_time - start_time)/2.0
@@ -1115,11 +1119,11 @@ class PLET_reduce():
                 print("Correcting runs NSF:{0} and SF:{1} at {2:<3.2f}meV".format(NSF_run,SF_run,ei))
 
                 if (self.file_format == '.nxspe'):
-                    NSF_One2One = LoadNXSPE(self.datadir + self.name_format.format(NSF_run, ei) + self.file_format)
-                    SF_One2One  = LoadNXSPE(self.datadir + self.name_format.format(SF_run, ei) + self.file_format)
+                    NSF_One2One = LoadNXSPE(self.datadir + '/' + self.name_format.format(NSF_run, ei) + self.file_format)
+                    SF_One2One  = LoadNXSPE(self.datadir + '/' + self.name_format.format(SF_run, ei) + self.file_format)
                 else:
-                    NSF_One2One = LoadNexus(self.datadir + self.name_format.format(NSF_run, ei) + self.file_format)
-                    SF_One2One  = LoadNexus(self.datadir + self.name_format.format(SF_run, ei) + self.file_format)                    
+                    NSF_One2One = LoadNexus(self.datadir + '/' + self.name_format.format(NSF_run, ei) + self.file_format)
+                    SF_One2One  = LoadNexus(self.datadir + '/' + self.name_format.format(SF_run, ei) + self.file_format)                    
 
 # Calculate FAP, cell transmission and Scharpf correction factor for these runs
 
