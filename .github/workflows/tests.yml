@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -34,7 +34,7 @@ jobs:
       #    key: mamba-${{ hashFiles('environment.yml') }}
 
       - name: Setup Miniconda
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v3
         with:
           environment-file: environment.yml
           create-args: >-
@@ -42,7 +42,7 @@ jobs:
 
       - name: Cache data and instrument files
         id: cache-files
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: |
             InstrumentFiles
