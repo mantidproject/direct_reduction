@@ -6,6 +6,7 @@ import json
 import warnings
 import importlib
 import types
+import copy
 import scipy.optimize
 from os.path import abspath, dirname
 from mantid.kernel.funcinspect import lhs_info
@@ -544,8 +545,7 @@ class DG_reduction_wrapper:
         return code, params
 
     def __call__(self, mod='reduction', **kwargs):
-        code, params = getattr(self, mod)
-        env = params
+        code, env = copy.deepcopy(getattr(self, mod))
         tmp_mod = types.ModuleType('DG_red_exec')
         tmp_mod.__file__ = os.path.join(self.curdir, f'DG_{mod}.py')
         env.update(tmp_mod.__dict__)
