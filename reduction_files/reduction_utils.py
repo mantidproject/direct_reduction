@@ -688,9 +688,12 @@ class PLET_reduce():
             Dummy = LoadNXSPE(self.datadir + '/' + self.name_format.format(run, ei) + self.file_format)
         else:
             Dummy = LoadNexus(self.datadir + '/' + self.name_format.format(run, ei) + self.file_format)
-        DummyWorkspace = mtd['Dummy']*0.0
-        self.DummyWorkspace = mtd['DummyWorkspace']
-        DeleteWorkspace(Dummy)
+        #DummyWorkspace = mtd['Dummy']*0.0
+        #self.DummyWorkspace = mtd['DummyWorkspace']
+        #DeleteWorkspace(Dummy)
+        # set y- and e-values to zero in place to save memory
+        [(Dummy.dataY(i).__imul__(0), Dummy.dataE(i).__imul__(0)) for i in range(Dummy.getNumberHistograms())]
+        self.DummyWorkspace = mtd['Dummy']
 
 #---------------------------------------------------------------------------
     def get_PF_from_monitor(self,PHe=0.6):
@@ -794,6 +797,7 @@ class PLET_reduce():
 
             NSF_quartz_total = CloneWorkspace(self.DummyWorkspace)
             SF_quartz_total  = CloneWorkspace(self.DummyWorkspace)
+            DeleteWorkspace(self.DummyWorkspace)
 
 # array of out-of-plane angles
             gamma = np.append(gamma,np.deg2rad(np.linspace(-30,30,num=256)))
@@ -1090,9 +1094,9 @@ class PLET_reduce():
             self.generate_dummy(self.sample_runs[0],ei)
             NSF_total       = CloneWorkspace(self.DummyWorkspace)
             SF_total        = CloneWorkspace(self.DummyWorkspace)
-            total           = CloneWorkspace(self.DummyWorkspace)
-            Scharpf_ws      = CloneWorkspace(self.DummyWorkspace)
-            transmission_ws = CloneWorkspace(self.DummyWorkspace)
+            #total           = CloneWorkspace(self.DummyWorkspace)
+            #Scharpf_ws      = CloneWorkspace(self.DummyWorkspace)
+            #transmission_ws = CloneWorkspace(self.DummyWorkspace)
 
 # Make wavelength and gamma arrays, same shape as the DummyWorkspace
             y_shape = NSF_total.extractY().shape   
@@ -1141,7 +1145,7 @@ class PLET_reduce():
                 flipping_ratio = (1.0 + FAP) / (1.0 - FAP)
                 transmission = np.exp(-opacity) * np.cosh(opacity * PHe)
                 Scharpf = (1.0 / (flipping_ratio - 1.0))
-
+                """
 # Populate Scharpf and transmission workspaces
                 for i in range(y_shape[0]):
                     Scharpf_ws.setY(i, Scharpf[i,:y_shape[1]])
@@ -1154,15 +1158,25 @@ class PLET_reduce():
                 Diff     = (NSF_One2One - SF_One2One) * Scharpf_ws
                 NSF_corr = (NSF_One2One + Diff) / transmission_ws
                 SF_corr  = (SF_One2One  - Diff) / transmission_ws
-                
+                """
+# Rewrite operations to perform calculations in-place to save memory (at cost of clarity)
+                for i in range(y_shape[0]):
+                    DiffY = (NSF_One2One.dataY(i) - SF_One2One.dataY(i)) * Scharpf[i,:y_shape[1]]
+                    NSF_total.dataY(i).__iadd__((NSF_One2One.dataY(i) + DiffY) / transmission[i,:y_shape[1]])
+                    SF_total.dataY(i).__iadd__((SF_One2One.dataY(i) - DiffY) / transmission[i,:y_shape[1]])
+
+                    DiffE = np.sqrt(NSF_One2One.dataE(i)**2 + SF_One2One.dataY(i)**2) * Scharpf[i,:y_shape[1]]
+                    NSF_total.dataE(i).__iadd__(np.sqrt(NSF_One2One.dataE(i)**2 + DiffY**2) / transmission[i,:y_shape[1]])
+                    SF_total.dataE(i).__iadd__(np.sqrt(SF_One2One.dataE(i)**2  + DiffY**2) / transmission[i,:y_shape[1]])
+
                 if self.sum_runs == True:
                     NSF_total.setYUnit('')
                     SF_total.setYUnit('')
-                    NSF_total = NSF_total + NSF_corr
-                    SF_total  = SF_total  + SF_corr
                 else:
-                    RenameWorkspace(NSF_corr,OutputWorkspace=NSF_out)
-                    RenameWorkspace(SF_corr,OutputWorkspace=SF_out)
+                    RenameWorkspace(NSF_total,OutputWorkspace=NSF_out)
+                    RenameWorkspace(SF_total,OutputWorkspace=SF_out)
+                    NSF_total = CloneWorkspace(self.DummyWorkspace)
+                    SF_total = CloneWorkspace(self.DummyWorkspace)
                     self.one2one_output(NSF_run,SF_run,ei)
                     
             if self.sum_runs == True:
@@ -1171,6 +1185,7 @@ class PLET_reduce():
                 RenameWorkspace(NSF_total,OutputWorkspace=NSF_out)
                 RenameWorkspace(SF_total,OutputWorkspace=SF_out)
             
+            DeleteWorkspace(self.DummyWorkspace)
             total = NSF_total + SF_total
             RenameWorkspace(total,OutputWorkspace=total_out)
             
