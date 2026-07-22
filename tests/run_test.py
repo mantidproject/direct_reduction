@@ -269,7 +269,7 @@ class DGReductionTest(unittest.TestCase):
         from reduction_utils import run_reduction
         run_reduction(sample=[97138, 97139], Ei_list=[1.7], sumruns=True, wv_file='WV_91329.txt', 
                       inst='LET', mask='LET_mask_222.xml', powdermap='LET_rings_222.xml', powder=True,
-                      cs_block='T_Stick', cs_block_unit='K', cs_bin_size=10)
+                      cs_block='T_Stick', cs_block_unit='K', cs_bin_size=10, saveformat='.nxspe')
         cksum = {}
         for tt in np.arange(197.9, 288, 10):
             filepath = os.path.join(self.outputpath, f'LET97138_1.7meV_{tt}K_powder.nxspe')
