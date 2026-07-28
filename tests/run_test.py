@@ -61,12 +61,12 @@ class DGReductionTest(unittest.TestCase):
                     'INSTRUMENT_NAME':'MARI',
                     'MASK_FILE_XML':'mari_mask2023_1.xml',
                     'RINGS_MAP_XML':'mari_res2013.map',
-                    'whitevan\s*=\s*[0-9]*':'whitevan = 28580',
-                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = [28581]',
-                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
-                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
-                    'wv_detrange\s*=\s*[\\[\\]0-9,]*':'wv_detrange = None',
-                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [180, 29.8, 11.7]'}
+                    'whitevan\\s*=\\s*[0-9]*':'whitevan = 28580',
+                    'sample\\s*=\\s*\\[*[\\]0-9,]+':'sample = [28581]',
+                    'sample_bg\\s*=\\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\\s*=\\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
+                    'wv_detrange\\s*=\\s*[\\[\\]0-9,]*':'wv_detrange = None',
+                    'Ei_list\\s*=\\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [180, 29.8, 11.7]'}
         s_api.config['default.instrument'] = 'MARI'
         infile = os.path.join(self.scriptpath, 'DG_whitevan.py')
         outfile = os.path.join(self.outputpath, 'mari_whitevan.py')
@@ -91,12 +91,12 @@ class DGReductionTest(unittest.TestCase):
                     'INSTRUMENT_NAME':'MARI',
                     'MASK_FILE_XML':'mari_mask2023_1.xml',
                     'RINGS_MAP_XML':'mari_res2013.map',
-                    'whitevan\s*=\s*[0-9]*':'whitevan = 28580',
-                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = [28727, 28728]',
-                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
-                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
-                    'wv_detrange\s*=\s*[\\[\\]0-9,]*':'wv_detrange = None',
-                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [1.84, 1.1]'}
+                    'whitevan\\s*=\\s*[0-9]*':'whitevan = 28580',
+                    'sample\\s*=\\s*\\[*[\\]0-9,]+':'sample = [28727, 28728]',
+                    'sample_bg\\s*=\\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\\s*=\\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
+                    'wv_detrange\\s*=\\s*[\\[\\]0-9,]*':'wv_detrange = None',
+                    'Ei_list\\s*=\\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [1.84, 1.1]'}
         infile = os.path.join(self.scriptpath, 'DG_reduction.py')
         outfile = os.path.join(self.outputpath, 'mari_reduction_lowE.py')
         self.substitute_file(infile, outfile, subsdict)
@@ -114,12 +114,12 @@ class DGReductionTest(unittest.TestCase):
                     'INSTRUMENT_NAME':'MARI',
                     'MASK_FILE_XML':'mari_mask2023_1.xml',
                     'RINGS_MAP_XML':'mari_res2013.map',
-                    'whitevan\s*=\s*[0-9]*':'whitevan = 28580',
-                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = ["ws_existing"]',
-                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
-                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
-                    'wv_detrange\s*=\s*[\\[\\]0-9,]*':'wv_detrange = None',
-                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [1.84, 1.1]'}
+                    'whitevan\\s*=\\s*[0-9]*':'whitevan = 28580',
+                    'sample\\s*=\\s*\\[*[\\]0-9,]+':'sample = ["ws_existing"]',
+                    'sample_bg\\s*=\\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\\s*=\\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_28580.txt\'',
+                    'wv_detrange\\s*=\\s*[\\[\\]0-9,]*':'wv_detrange = None',
+                    'Ei_list\\s*=\\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [1.84, 1.1]'}
         ws_existing = s_api.Load('MAR28728.raw', LoadMonitors='Exclude')
         ws_existing = s_api.RemoveSpectra(ws_existing, [0])
         infile = os.path.join(self.scriptpath, 'DG_reduction.py')
@@ -140,11 +140,11 @@ class DGReductionTest(unittest.TestCase):
                     'INSTRUMENT_NAME':'LET',
                     'MASK_FILE_XML':'LET_mask_222.xml',
                     'RINGS_MAP_XML':'LET_rings_222.xml',
-                    'whitevan\s*=\s*[0-9]*':'whitevan = 91329',
-                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = 93338',
-                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = 93329',
-                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_91329.txt\'',
-                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [3.7, 1.77, 1.03]',
+                    'whitevan\\s*=\\s*[0-9]*':'whitevan = 91329',
+                    'sample\\s*=\\s*\\[*[\\]0-9,]+':'sample = 93338',
+                    'sample_bg\\s*=\\s*\\[*[\\]0-9,]+':'sample_bg = 93329',
+                    'wv_file\\s*=\\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_91329.txt\'',
+                    'Ei_list\\s*=\\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [3.7, 1.77, 1.03]',
                     'QENS = False':'QENS = True'}
         s_api.config['default.instrument'] = 'LET'
         infile = os.path.join(self.scriptpath, 'DG_whitevan.py')
@@ -170,12 +170,12 @@ class DGReductionTest(unittest.TestCase):
                     'INSTRUMENT_NAME':'LET',
                     'MASK_FILE_XML':'LET_mask_222.xml',
                     'RINGS_MAP_XML':'LET_rings_222.xml',
-                    'whitevan\s*=\s*[0-9]*':'whitevan = 91329',
-                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = [92089, 92168]',
-                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
-                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_91329.txt\'',
-                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [3.7]',
-                    'powder\s*=\s*True': 'powder = False',
+                    'whitevan\\s*=\\s*[0-9]*':'whitevan = 91329',
+                    'sample\\s*=\\s*\\[*[\\]0-9,]+':'sample = [92089, 92168]',
+                    'sample_bg\\s*=\\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\\s*=\\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_91329.txt\'',
+                    'Ei_list\\s*=\\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [3.7]',
+                    'powder\\s*=\\s*True': 'powder = False',
                     "saveformat = '.nxspe'":"saveformat = '.nxs'",
                     "same_angle_action = 'ignore'":"same_angle_action = 'replace'"}
         s_api.config['default.instrument'] = 'LET'
@@ -201,11 +201,11 @@ class DGReductionTest(unittest.TestCase):
                     'INSTRUMENT_NAME':'MERLIN',
                     'MASK_FILE_XML':'mask_211_fix.xml',
                     'RINGS_MAP_XML':'rings_193.map',
-                    'whitevan\s*=\s*[0-9]*':'whitevan = 57088',
-                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = 59151',
-                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
-                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_57088.txt\'',
-                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [150]'}
+                    'whitevan\\s*=\\s*[0-9]*':'whitevan = 57088',
+                    'sample\\s*=\\s*\\[*[\\]0-9,]+':'sample = 59151',
+                    'sample_bg\\s*=\\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\\s*=\\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_57088.txt\'',
+                    'Ei_list\\s*=\\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [150]'}
         s_api.config['default.instrument'] = 'MERLIN'
         infile = os.path.join(self.scriptpath, 'DG_whitevan.py')
         outfile = os.path.join(self.outputpath, 'merlin_whitevan.py')
@@ -229,13 +229,13 @@ class DGReductionTest(unittest.TestCase):
                     'INSTRUMENT_NAME':'MAPS',
                     'MASK_FILE_XML':'4to1_211_msk.xml',
                     'RINGS_MAP_XML':'MAPS_rings.map',
-                    'whitevan\s*=\s*[0-9]*':'whitevan = 41272',
-                    'sample\s*=\s*\\[*[\\]0-9,]+':'sample = 41335',
-                    'sample_bg\s*=\s*\\[*[\\]0-9,]+':'sample_bg = None',
-                    'wv_file\s*=\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_41272.txt\'',
-                    'Ei_list\s*=\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [80]',
+                    'whitevan\\s*=\\s*[0-9]*':'whitevan = 41272',
+                    'sample\\s*=\\s*\\[*[\\]0-9,]+':'sample = 41335',
+                    'sample_bg\\s*=\\s*\\[*[\\]0-9,]+':'sample_bg = None',
+                    'wv_file\\s*=\\s*[\\\'A-z0-9\\.]*':'wv_file = \'WV_41272.txt\'',
+                    'Ei_list\\s*=\\s*[\\[\\]\\.0-9,]+.*':'Ei_list = [80]',
                     'fixei = True':'fixei = False',
-                    'powder\s*=\s*True':'powder = False',
+                    'powder\\s*=\\s*True':'powder = False',
                     'm2spec = 36867':'m2spec = 41475',
                     'm3spec = 36868':'m3spec = 41476'}
         s_api.config['default.instrument'] = 'MAPS'
@@ -327,7 +327,7 @@ class DGReductionTest(unittest.TestCase):
                     'Predict_peaks = ': 'Predict_peaks = False #',
                     'from mantidqt.utils.qt import import_qt': '',
                     'from mantidqt.widgets.instrumentview.api import get_instrumentview': 'import unittest.mock\ndef get_instrumentview(*args):\n    return unittest.mock.MagicMock()',
-                    'time.sleep\(1\)': 'AddPeak("SingleCrystalPeakTable", "ws", *ppm[x]); break'}
+                    'time.sleep\\(1\\)': 'AddPeak("SingleCrystalPeakTable", "ws", *ppm[x]); break'}
         s_api.config['default.instrument'] = 'MAPS'
         infile = os.path.join(self.scriptpath, 'DG_alignment.py')
         outfile = os.path.join(self.outputpath, 'maps_alignment.py')
@@ -337,6 +337,36 @@ class DGReductionTest(unittest.TestCase):
         self.assertTrue('Processed Peak Table Unaligned' in s_api.mtd)
         assert_allclose(maps_alignment.u_aligned, [1., 1., 0.], rtol=0, atol=0.05)
         assert_allclose(maps_alignment.v_aligned, [-1., 1., 0.], rtol=0, atol=0.05)
+
+
+    def test_PLET(self):
+        from reduction_utils import iliad
+        iliad(runno=range(115331,115339), wbvan=114758, ei=[3.6], FixEi=True, inst='let',
+            Erange=[-2, 0.005, 0.8], hard_mask_file='PLET_mask_261.xml', powder=False, saveformat='.nxs')
+        subsdict = {'\nconfig':'\n#config',
+                    'from reduction_utils':'import unittest.mock\nimport reduction_utils\n'
+                        'reduction_utils.pyplot = unittest.mock.Mock()\nPLET_reduce = reduction_utils.PLET_reduce #',
+                    'datadir = ':f'datadir = "{self.outputpath}" #',
+                    'sample_runs =':'sample_runs = range(115331, 115339) #',
+                    'NSF_first =':'NSF_first = False #',
+                    'eis\\s*=':'eis = [3.6] #',
+                    'PF\\s*=':'PF = [0.91] #',
+                    'rings_map = ':'rings_map = "LET_rings_255.xml" #',
+                    'input_format =':'input_format = ".nxs" #'}
+        s_api.config['default.instrument'] = 'LET'
+        infile = os.path.join(self.scriptpath, 'DG_PLET-analysis.py')
+        outfile = os.path.join(self.outputpath, 'plet_analysis.py')
+        self.substitute_file(infile, outfile, subsdict)
+        import plet_analysis
+        self.assertTrue(os.path.exists(os.path.join(self.outputpath, '3HeCal_115331-115338.txt')))
+        cksum = {}
+        for typ in ['coh', 'inc', 'total']:
+            filepath = os.path.join(self.outputpath, f'PLET_quartz_3.60meV_{typ}_rings.nxspe')
+            self.assertTrue(os.path.exists(filepath))
+            cksum[f'PLET_quartz_3.60meV_{typ}_rings.nxspe'] = self.load_return_sum(filepath)
+        assert_allclose(cksum['PLET_quartz_3.60meV_coh_rings.nxspe'], [23247.44710162174, 409.0576401996717])
+        assert_allclose(cksum['PLET_quartz_3.60meV_inc_rings.nxspe'], [779.3833730498458, 7.022830832325953])
+        assert_allclose(cksum['PLET_quartz_3.60meV_total_rings.nxspe'], [24026.83047467159, 416.0804710319976])
 
 
 if __name__ == '__main__':

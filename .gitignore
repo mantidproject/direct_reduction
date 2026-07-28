@@ -20,3 +20,7 @@ MAP*nxs*
 MER*nxs*
 WV*txt
 InstrumentFiles
+
+tests/*nxspe
+tests/3He*txt
+tests/WV*txt
