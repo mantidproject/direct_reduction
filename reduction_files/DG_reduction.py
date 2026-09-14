@@ -35,20 +35,21 @@ Ei_list        = ['auto']                    # incident energies (Ei) - from PyC
 Erange         = [-0.8,0.0025,0.8]           # energy transfer range to output in fractions of Ei
 trans          = [0.95,0.95,0.95]            # elastic line transmission factors for each Ei
 mask           = 'MASK_FILE_XML'             # hard mask
-# what to do if see run with same angle as previous run (and sumruns==False)
+output_horace  = True                        # Set to False if want output for Shiver for single xtal
+cont_rotation  = False                       # Set to True if using continuous rotation for single xtal
+cs_block       = None                        # Set to block name if want files split by e.g. temperature
+                                             # Set cs_block = None if just using continuous rotation
+cs_bin_size    = 1                           # Only used for Horace output - bins size for angles or block 
+# the next option is ignored for continuous rotation, when sumruns=True, or output_horace=False
+# it determines what the script does if it sees a run with same angle as previous run in the list:
 #  - 'replace': sum and replace first nxspe file created
 #  - 'ignore': ignore and create an nxspe for each run
 same_angle_action = 'ignore'
-# to enable creating multiple reduced data files from a single
-# "continuous scan" set the following variables to a valid log "block"
-# name and the bin size (width) to something larger than zero.
-# An optional unit can be given.
-# If sumruns=True, the sample list is summed and then divided
-# If sumruns=False and multiple sample runs are listed, an error is raised.
-# This is also only compatible with same_angle_action='ignore'
-cs_block = None
-cs_block_unit = ''
-cs_bin_size = 0
+# next option is only for single crystal Shiver/Mantid reduction
+sample_pars = {'lattice_pars':[4.1, 4.1, 4.1],
+               'lattice_angles':[90., 90., 90.],
+               'u':[1,0,0], 'v':[0,1,0],
+               'psi0': 123.1}
 #========================================================
 
 #==================Absolute Units Inputs=================
@@ -75,14 +76,11 @@ psi_motor_name = 'rot'          # name of the rotation motor in the logs
 angles_workspace = 'angles_ws'  # name of workspace to store previously seen angles
 sumruns_savemem = False         # Compresses event in summed ws to save memory
                                 # (causes some loss of data so cannot use event filtering)
-cs_smidge = 0.001               # Tolerance on continuous scan bins size
-cs_conv_to_md = False           # Convert a continuous scan to an MDWorkspace
-cs_conv_pars = {}               # A dict with 'lattice_pars', 'lattice_angles', 'u', 'v', 'psi0'
-cs_single = False               # Outputs an EventWorkspace of a continuous scan (does not histogram)
+cs_smidge = 0.001               # Tolerance on continuous scan bins size (only for Horace)
 #========================================================
 #!end_params
 
-# ==============================setup directroties================================
+# ==================setup directories====================
 config['default.instrument'] = inst
 if save_dir is not None:
     config['defaultsave.directory'] = save_dir
@@ -183,6 +181,11 @@ def load_sum(run_list, block_name=None):
 
 #========================================================
 
+# ============================Options logic checks===============================
+if sumruns and powder is False and cont_rotation is False:
+    raise RuntimeError('sumruns=True option cannot be used with fixed angle (discrete) single crystal scans')
+if powder is True and cont_rotation is True:
+    raise RuntimeError('Cannot run *powder* reduction for *continuous rotation* scans')
 
 print(f'\n======= {inst} data reduction =======')
 print(f'Working directory... {ConfigService.Instance().getString("defaultsave.directory")}\n')
@@ -226,16 +229,17 @@ if sample_bg is not None:
         ws_bg = ws_bg - ws_cd
 
 # ==========================continuous scan stuff=============================
-if cs_block and cs_bin_size > 0:
+if output_horace and (cont_rotation or cs_block is not None):
     if len(sample) > 1 and not sumruns:
-        raise RuntimeError('Continous scans for multiple (non-summed) files not supported')
+        raise RuntimeError('Continuous scans for multiple (non-summed) files not supported')
     if same_angle_action.lower() != 'ignore':
-        raise RuntimeError(f'Continous scans not compatible with same_angle_action="{same_angle_action}"')
+        raise RuntimeError(f'Continuous scans not compatible with same_angle_action="{same_angle_action}"')
     # Sets sumruns false so don't redo the sum below. Instead sum here to get filtered block values.
     # This is due to a bug in the Mantid "Plus" algorithm, which gives incorrect filtered values
     # https://github.com/mantidproject/mantid/issues/36194
     sumruns = False
-    ws_full, bval = load_sum(sample, cs_block)
+    blockname = cs_block if cs_block is not None else psi_motor_name
+    ws_full, bval = load_sum(sample, blockname)
     ws = ws_full # So that auto-ei works (it assumes the workspace variable is "ws")
     ws_monitors = CloneWorkspace('ws_full_monitors')
     bval_range = max(bval) - min(bval)
@@ -244,16 +248,15 @@ if cs_block and cs_bin_size > 0:
     # Overrides the sample list in order to hijack the loop over run numbers below
     irun_orig = sample[0]
     sample = [x*cs_bin_size + min(bval) for x in range(bval_nbins)]
-    unit = cs_block_unit
-    if not unit:
-        unit = ws_full.getRun().getLogData(cs_block).units
-    print(f'{cs_block} = {min(bval):.1f} {unit} to {max(bval):.1f} {unit}')
+    unit = ws_full.getRun().getLogData(blockname).units
+    if not unit or unit == ' ':
+      unit = 'degree' if cont_rotation else 'K'
+    print(f'{blockname} = {min(bval):.1f} {unit} to {max(bval):.1f} {unit}')
     print(f'... filtering in {cs_bin_size:.1f} {unit} steps')
     print(f'... N={bval_nbins} bins with {bval_remainder:.2f} {unit} remainder')
-if cs_conv_to_md:
-    powder = False
-    assert all([v in cs_conv_pars for v in ['lattice_pars', 'lattice_ang', 'u', 'v', 'psi0']]), \
-        'Conversion to MDWorkspace needs parameters: "lattice_pars", "lattice_ang", "u", "v", "psi0"'
+if output_horace is False and powder is False:
+    assert all([v in sample_pars for v in ['lattice_pars', 'lattice_angles', 'u', 'v', 'psi0']]), \
+        'Conversion to MDWorkspace needs parameters: "lattice_pars", "lattice_angles", "u", "v", "psi0"'
 
 # =======================sum sample runs if required=========================
 sumsuf = sumruns and len(sample) > 1
@@ -330,17 +333,17 @@ for irun in sample:
 
     # For continuous scans generate the workspace based on binned log values
     # NB. we replaced the sample (run) list with list of block min bin boundaries
-    if cs_block and cs_bin_size > 0:
+    if output_horace and (cont_rotation or cs_block is not None):
         val = round(irun + cs_bin_size/2,1)
-        print(f"Filtering: {cs_block}={val:.1f} ± {round(cs_bin_size/2,2):.2f} {unit}")
-        ws = FilterByLogValue(ws_full, cs_block, irun, irun + cs_bin_size - cs_smidge)
+        print(f"Filtering: {blockname}={val:.1f} ± {round(cs_bin_size/2,2):.2f} {unit}")
+        ws = FilterByLogValue(ws_full, blockname, irun, irun + cs_bin_size - cs_smidge)
 
     # if this run is at an angle already seen and we are doing 'replace', skip
     if same_angle_action.lower() != 'ignore' and irun in runs_with_angles_already_seen:
         continue
 
     print('============')
-    if not sumruns and not cs_block:
+    if not sumruns and (not output_horace or (not cont_rotation and cs_block is None)):
         # Checks rotation angle
         if same_angle_action.lower() != 'ignore':
             runs_with_same_angles = get_angle(irun, angles_workspace, psi_motor_name, tryload)
@@ -434,8 +437,8 @@ for irun in sample:
         MoveInstrumentComponent(ws_rep, ComponentName=source, Z=m2pos, RelativePosition=False)
 
         ws_rep = ConvertUnits(ws_rep, 'DeltaE', EMode='Direct', EFixed=Ei)
-        ws_out = Rebin(ws_rep, [x*origEi for x in Erange], PreserveEvents=cs_single)
-        if not cs_single:
+        ws_out = Rebin(ws_rep, [x*origEi for x in Erange], PreserveEvents=(not output_horace))
+        if output_horace:
             ws_out = DetectorEfficiencyCor(ws_out, IncidentEnergy=Ei)
         ws_out = CorrectKiKf(ws_out, Efixed=Ei, EMode='Direct')
         ADS.remove('ws_rep')
@@ -446,7 +449,7 @@ for irun in sample:
         ws_out = Scale('ws_out', mvf, 'Multiply')
 
         # Sets output file name
-        if cs_block and cs_bin_size > 0:
+        if output_horace and (cont_rotation or cs_block is not None):
             ofile_prefix = f'{inst[:3]}{irun_orig}'
             ofile_suffix = f"_{val:.1f}{unit}"
         else:
@@ -478,18 +481,20 @@ for irun in sample:
             Transpose(f'{ofile}_elastic', OutputWorkspace=f'{ofile}_elastic')
 
         # Convert to MD:
-        if cs_conv_to_md:
-            SetGoniometer('ws_out', Axis0=f'{cs_block},0,1,0,1', Axis1=f'{cs_conv_pars["psi0"]},0,1,0,-1')
-            a, b, c = tuple(cs_conv_pars['lattice_pars'])
-            alpha, beta, gamma = tuple(cs_conv_pars['lattice_ang'])
-            SetUB('ws_out', a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma, u=cs_conv_pars['u'], v=cs_conv_pars['v'])
-            mn, mx = ConvertToMDMinMaxGlobal('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='HKL')
-            ConvertToMD('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='HKL', QConversionScales='HKL',
-                MinValues=mn, MaxValues=mx, PreprocDetectorsWS='-', OutputWorkspace=ofile+'_ang_md')
-            continue
-
-        if cs_single:
-            CloneWorkspace('ws_out', OutputWorkspace='single_md')
+        if output_horace is False:
+            SetGoniometer('ws_out', Axis0=f'{psi_motor_name},0,1,0,1', Axis1=f'{sample_pars["psi0"]},0,1,0,-1')
+            a, b, c = tuple(sample_pars['lattice_pars'])
+            alpha, beta, gamma = tuple(sample_pars['lattice_angles'])
+            uvec, vvec = (f'{v[0]},{v[1]},{v[2]}' if isinstance(v, list) else v for v in [sample_pars['u'], sample_pars['v']])
+            SetUB('ws_out', a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma, u=uvec, v=vvec)
+            CropWorkspaceForMDNorm('ws_out', XMin=Erange[0]*origEi, XMax=Erange[2]*origEi, OutputWorkspace='ws_out')
+            mn, mx = ConvertToMDMinMaxLocal('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q_sample')
+            ConvertToMD('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q_sample', PreprocDetectorsWS='-',
+                MinValues=mn, MaxValues=mx, UseLogTimes=cont_rotation, OverwriteExisting=(not cont_rotation),
+                OutputWorkspace='ws_md')
+            if cont_rotation:
+                print(f'{inst}: Writing continuous {ofile}_MDE.nxs')
+                SaveMD('ws_md', Filename=f'{ofile}_MDE.nxs')
             continue
 
         # output appropriate formats
@@ -536,6 +541,11 @@ for irun in sample:
     print(f'\n{inst}: Reduction complete in {time.time() - t:.1f} seconds\n')
 
 # ============================= End of run loop ================================
+
+if output_horace is False and cont_rotation is False:
+    ofile = f'{inst[:3]}{sample[0]}to{sample[-1]}'
+    print(f'{inst}: Writing discrete {ofile}_MDE.nxs')
+    SaveMD('ws_md', Filename=f'{ofile}_MDE.nxs')
 
 # cleanup
 if not idebug:
