@@ -325,7 +325,24 @@ class DGReductionTest(unittest.TestCase):
             26.42, 15.75, 20.21, 28.5, 116.91, 29.89, 31.72, 77.38, 26.14, 179.19, 15.8, 24.85, 16.92, 10.44, 17.81,
             30.12, 15.5, 32.23, 37.15, 153.69, 12.86, 18.06, 17.03, 28.96, 21.75, 98.81, 13.79, 19.56, 144.82, 17.22,
             151.79, 28.43, 83.35, 19.08], atol=0.1)
- 
+
+
+    def test_livedata_continuous_shiver(self):
+        from reduction_utils import iliad
+        s_api.Load(os.path.join(self.datapath, 'mno_live_1.nxs'), OutputWorkspace='mno_live_1')
+        output_ws = iliad(runno=['mno_live_1'], wbvan=71617, ei=[30], FixEi=True, powder=False,
+            Erange=[-0.5, 0.01, 0.85], cont_rotation=True, psi_motor_name='Rot', output_horace=False,
+            sample_pars={'lattice_pars':[4.446]*3, 'lattice_angles':[90]*3, 'u':'1,1,0', 'v':'0,0,1', 'psi0':132.5},
+            hard_mask_file='mask_25_1.xml', inst='merlin', powdermap='MERLIN_rings_251.xml')
+        filepath = os.path.join(self.outputpath, f'MERmno_live_1_30meV_1to1_MDE.nxs')
+        self.assertTrue(os.path.exists(filepath))
+        ws = s_api.Load(filepath)
+        wsbin = s_api.MDNorm(ws, Dimension0Binning='-3,6,3', Dimension1Binning='-3,6,3',
+            Dimension2Binning='-2,4,2', Dimension3Name='DeltaE', Dimension3Binning='-15,5,25',
+            OutputDataWorkspace='wsbin_data', OutputNormalizationWorkspace='wsbin_norm')
+        yy = np.squeeze(s_api.mtd['wsbin'].getSignalArray())
+        assert_allclose(yy, [0.000139, 0.002485, 0.000918, 0.00038 , 0.001667, 0.00123, 0.000479, 0.000282], atol=1e-5)
+
 
     def test_alignment(self):
         subsdict = {'\nconfig':'\n#config',
