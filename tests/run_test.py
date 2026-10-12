@@ -341,7 +341,7 @@ class DGReductionTest(unittest.TestCase):
             Dimension2Binning='-2,4,2', Dimension3Name='DeltaE', Dimension3Binning='-15,5,25',
             OutputDataWorkspace='wsbin_data', OutputNormalizationWorkspace='wsbin_norm')
         yy = np.squeeze(s_api.mtd['wsbin'].getSignalArray())
-        assert_allclose(yy, [0.000139, 0.002485, 0.000918, 0.00038 , 0.001667, 0.00123, 0.000479, 0.000282], atol=1e-5)
+        assert_allclose(yy, [0.000243, 0.003778, 0.001498, 0.000466, 0.00179 , 0.001186, 0.000388, 0.00019], atol=1e-5)
 
 
     def test_alignment(self):

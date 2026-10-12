@@ -73,6 +73,7 @@ theta_range = [5., 65.]         # useful theta range for Q-binning (QENS)
 idebug = False                  # keep workspaces and check absolute units on elastic line
 save_dir = f'/data/analysis/{inst}/RBNumber/USER_RB_FOLDER'  # Set to None to avoid reseting
 psi_motor_name = 'rot'          # name of the rotation motor in the logs
+psi_sense = 1                   # +1 CCW positive == Orange, -1 CW positve == magnet
 angles_workspace = 'angles_ws'  # name of workspace to store previously seen angles
 sumruns_savemem = False         # Compresses event in summed ws to save memory
                                 # (causes some loss of data so cannot use event filtering)
@@ -482,15 +483,15 @@ for irun in sample:
 
         # Convert to MD:
         if output_horace is False:
-            SetGoniometer('ws_out', Axis0=f'{psi_motor_name},0,1,0,1', Axis1=f'{sample_pars["psi0"]},0,1,0,-1')
+            SetGoniometer('ws_out', Axis0=f'{psi_motor_name},0,1,0,{psi_sense}', Axis1=f'{sample_pars["psi0"]},0,1,0,{-psi_sense}')
             a, b, c = tuple(sample_pars['lattice_pars'])
             alpha, beta, gamma = tuple(sample_pars['lattice_angles'])
             uvec, vvec = (f'{v[0]},{v[1]},{v[2]}' if isinstance(v, list) else v for v in [sample_pars['u'], sample_pars['v']])
             SetUB('ws_out', a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma, u=uvec, v=vvec)
             CropWorkspaceForMDNorm('ws_out', XMin=Erange[0]*origEi, XMax=Erange[2]*origEi, OutputWorkspace='ws_out')
-            mn, mx = ConvertToMDMinMaxLocal('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q_sample')
+            mn, mx = ConvertToMDMinMaxGlobal('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q')
             ConvertToMD('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q_sample', PreprocDetectorsWS='-',
-                MinValues=mn, MaxValues=mx, UseLogTimes=cont_rotation, OverwriteExisting=(not cont_rotation),
+                MinValues=mn, MaxValues=mx, UseLogTimes=cont_rotation, OverwriteExisting=cont_rotation,
                 OutputWorkspace='ws_md')
             if cont_rotation:
                 print(f'{inst}: Writing continuous {ofile}_MDE.nxs')
