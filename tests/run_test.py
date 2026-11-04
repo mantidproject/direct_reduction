@@ -269,7 +269,7 @@ class DGReductionTest(unittest.TestCase):
         from reduction_utils import run_reduction
         run_reduction(sample=[97138, 97139], Ei_list=[1.7], sumruns=True, wv_file='WV_91329.txt', 
                       inst='LET', mask='LET_mask_222.xml', powdermap='LET_rings_222.xml',
-                      cs_block='T_Stick', cs_block_unit='K', cs_bin_size=10)
+                      cs_block='T_Stick', cs_bin_size=10)
         cksum = {}
         for tt in np.arange(197.9, 288, 10):
             filepath = os.path.join(self.outputpath, f'LET97138_1.7meV_{tt}K_powder.nxspe')
@@ -287,16 +287,25 @@ class DGReductionTest(unittest.TestCase):
         assert_allclose(cksum['LET97138_1.7meV_287.9K_powder.nxspe'], [1059.5601228491867, 3.0205581732234803])
 
 
-    def test_livedata_continuous(self):
+    def test_livedata_continuous_horace(self):
         # Tests a saved livestream dataset from MnO on MERLIN
         from reduction_utils import iliad
         s_api.Load(os.path.join(self.datapath, 'mno_live_1.nxs'), OutputWorkspace='mno_live_1')
-        output_ws = iliad(runno=['mno_live_1'], wbvan=71617, ei=[30], FixEi=True,
-            Erange=[-0.5, 0.01, 0.85], cs_block='Rot', cs_bin_size=30, cs_conv_to_md=True,
-            cs_conv_pars={'lattice_pars':[4.446]*3, 'lattice_ang':[90]*3, 'u':'1,1,0', 'v':'0,0,1', 'psi0':132.5},
-            hard_mask_file='mask_25_1.xml', inst='merlin', powdermap='MERLIN_rings_251.xml')
-        #    hard_mask_file='mask_211_fix.xml')
-        allws = [w for w in s_api.mtd.getObjectNames() if f'MERmno_live_1_30meV' in w and w.endswith('_ang_md')]
+        output_ws = iliad(runno=['mno_live_1'], wbvan=71617, ei=[30], FixEi=True, powder=False, saveformat='.nxspe',
+            Erange=[-0.5, 0.01, 0.85], cont_rotation=True, psi_motor_name='Rot', cs_bin_size=30, output_horace=True,
+            hard_mask_file='mask_25_1.xml', inst='merlin', powdermap='MERLIN_rings_251.xml', keepworkspaces=True)
+        allws, a = [], 4.446
+        for rr in np.arange(147.1, 298, 30):
+            filepath = os.path.join(self.outputpath, f'MERmno_live_1_30meV_{rr}degree_1to1.nxspe')
+            self.assertTrue(os.path.exists(filepath))
+            ws = s_api.mtd[f'MERmno_live_1_30meV_{rr}degree_1to1.nxspe']
+            s_api.ConvertFromDistribution(ws)
+            s_api.SetGoniometer(ws, Axis0='Rot,0,1,0,1', Axis1='132.5,0,1,0,-1')
+            s_api.SetUB(ws, a=a, b=a, c=a, alpha=90, beta=90, gamma=90, u='1,1,0', v='0,0,1')
+            mn, mx = s_api.ConvertToMDMinMaxGlobal(ws, QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='HKL')
+            s_api.ConvertToMD(ws, QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='HKL', QConversionScales='HKL',
+                MinValues=mn, MaxValues=mx, PreprocDetectorsWS='-', OutputWorkspace=filepath)
+            allws.append(filepath)
         print('Merging Horace angle workspaces')
         wsout = s_api.MergeMD(','.join(allws), OutputWorkspace=f'MERmno_live_1_30meV_1to1_md')
         mn = [wsout.getDimension(i).getMinimum() for i in range (4)]
@@ -316,7 +325,24 @@ class DGReductionTest(unittest.TestCase):
             26.42, 15.75, 20.21, 28.5, 116.91, 29.89, 31.72, 77.38, 26.14, 179.19, 15.8, 24.85, 16.92, 10.44, 17.81,
             30.12, 15.5, 32.23, 37.15, 153.69, 12.86, 18.06, 17.03, 28.96, 21.75, 98.81, 13.79, 19.56, 144.82, 17.22,
             151.79, 28.43, 83.35, 19.08], atol=0.1)
- 
+
+
+    def test_livedata_continuous_shiver(self):
+        from reduction_utils import iliad
+        s_api.Load(os.path.join(self.datapath, 'mno_live_1.nxs'), OutputWorkspace='mno_live_1')
+        output_ws = iliad(runno=['mno_live_1'], wbvan=71617, ei=[30], FixEi=True, powder=False,
+            Erange=[-0.5, 0.01, 0.85], cont_rotation=True, psi_motor_name='Rot', output_horace=False,
+            sample_pars={'lattice_pars':[4.446]*3, 'lattice_angles':[90]*3, 'u':'1,1,0', 'v':'0,0,1', 'psi0':132.5},
+            hard_mask_file='mask_25_1.xml', inst='merlin', powdermap='MERLIN_rings_251.xml')
+        filepath = os.path.join(self.outputpath, f'MERmno_live_1_30meV_1to1_MDE.nxs')
+        self.assertTrue(os.path.exists(filepath))
+        ws = s_api.Load(filepath)
+        wsbin = s_api.MDNorm(ws, Dimension0Binning='-3,6,3', Dimension1Binning='-3,6,3',
+            Dimension2Binning='-2,4,2', Dimension3Name='DeltaE', Dimension3Binning='-15,5,25',
+            OutputDataWorkspace='wsbin_data', OutputNormalizationWorkspace='wsbin_norm')
+        yy = np.squeeze(s_api.mtd['wsbin'].getSignalArray())
+        assert_allclose(yy, [0.000243, 0.003778, 0.001498, 0.000466, 0.00179 , 0.001186, 0.000388, 0.00019], atol=1e-5)
+
 
     def test_alignment(self):
         subsdict = {'\nconfig':'\n#config',

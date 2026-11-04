@@ -127,7 +127,7 @@ def copy_inst_info(outfile, in_ws):
         return
     if not os.path.exists(outfile):
         outfile = os.path.join(mantid.simpleapi.config['defaultsave.directory'], os.path.basename(outfile))
-    en0 = mtd[in_ws].getEFixed(mtd[in_ws].getDetector(0).getID())
+    en0 = mtd[in_ws].getEFixed(mtd[in_ws].getDetector(1).getID())
     with h5py.File(raw_file_name, 'r') as raw:
         exclude = ['dae', 'detector_1', 'name']
         try:
@@ -1002,7 +1002,7 @@ class PLET_reduce():
                 cal_out = f"3HeCal_{self.sample_runs[0]}-{self.sample_runs[-1]}.txt"
                 file = open(cal_out, "w")
                 print(self.PHe0,-self.T1,self.sample_runs[0], file=file)
-                file.close
+                file.close()
                 print(f"\nCell calibration written to {cal_out}")
 
             print("\nInitial Cell polarization P0={0:.3f} ± {1:.4f} with lifetime T1={2:.2f} ± {3:.2f} hours".format(self.PHe0,self.PHe0e,-self.T1,self.T1e))
