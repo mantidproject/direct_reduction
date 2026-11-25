@@ -491,7 +491,7 @@ for irun in sample:
             CropWorkspaceForMDNorm('ws_out', XMin=Erange[0]*origEi, XMax=Erange[2]*origEi, OutputWorkspace='ws_out')
             mn, mx = ConvertToMDMinMaxGlobal('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q')
             ConvertToMD('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q_sample', PreprocDetectorsWS='-',
-                MinValues=mn, MaxValues=mx, UseLogTimes=cont_rotation, OverwriteExisting=cont_rotation,
+                MinValues=mn, MaxValues=mx, UseLogTimes=cont_rotation, OverwriteExisting=False,#cont_rotation,
                 OutputWorkspace='ws_md')
             if cont_rotation:
                 print(f'{inst}: Writing continuous {ofile}_MDE.nxs')
