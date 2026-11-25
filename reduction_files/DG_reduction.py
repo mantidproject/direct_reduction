@@ -493,9 +493,9 @@ for irun in sample:
             ConvertToMD('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q_sample', PreprocDetectorsWS='-',
                 MinValues=mn, MaxValues=mx, UseLogTimes=cont_rotation, OverwriteExisting=False,#cont_rotation,
                 OutputWorkspace='ws_md')
-            if cont_rotation:
-                print(f'{inst}: Writing continuous {ofile}_MDE.nxs')
-                SaveMD('ws_md', Filename=f'{ofile}_MDE.nxs')
+            #if cont_rotation:
+            #    print(f'{inst}: Writing continuous {ofile}_MDE.nxs')
+            #    SaveMD('ws_md', Filename=f'{ofile}_MDE.nxs')
             continue
 
         # output appropriate formats
@@ -543,7 +543,7 @@ for irun in sample:
 
 # ============================= End of run loop ================================
 
-if output_horace is False and cont_rotation is False:
+if True:#output_horace is False and cont_rotation is False:
     ofile = f'{inst[:3]}{sample[0]}to{sample[-1]}'
     print(f'{inst}: Writing discrete {ofile}_MDE.nxs')
     SaveMD('ws_md', Filename=f'{ofile}_MDE.nxs')
