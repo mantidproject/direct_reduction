@@ -36,6 +36,7 @@ Erange         = [-0.8,0.0025,0.8]           # energy transfer range to output i
 trans          = [0.95,0.95,0.95]            # elastic line transmission factors for each Ei
 mask           = 'MASK_FILE_XML'             # hard mask
 output_horace  = True                        # Set to False if want output for Shiver for single xtal
+force_rot_step = False
 cont_rotation  = False                       # Set to True if using continuous rotation for single xtal
 cs_block       = None                        # Set to block name if want files split by e.g. temperature
                                              # Set cs_block = None if just using continuous rotation
@@ -482,7 +483,7 @@ for irun in sample:
             Transpose(f'{ofile}_elastic', OutputWorkspace=f'{ofile}_elastic')
 
         # Convert to MD:
-        if output_horace is False:
+        if output_horace is False or force_rot_step:
             SetGoniometer('ws_out', Axis0=f'{psi_motor_name},0,1,0,{psi_sense}', Axis1=f'{sample_pars["psi0"]},0,1,0,{-psi_sense}')
             a, b, c = tuple(sample_pars['lattice_pars'])
             alpha, beta, gamma = tuple(sample_pars['lattice_angles'])
