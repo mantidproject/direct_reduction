@@ -163,13 +163,13 @@ def load_sum(run_list, block_name=None):
             w_buf = CloneWorkspace('ws')
             w_buf_monitors = CloneWorkspace('ws_monitors')
             if block_name:
-                bval = mtd['ws'].getRun().getLogData(block_name)#.filtered_value
+                bval = mtd['ws'].getRun().getLogData(block_name).value#.filtered_value
             print(f'run #{irun} loaded')
         else:
             w_buf = Plus('w_buf', 'ws')
             w_buf_monitors = Plus('w_buf_monitors', 'ws_monitors')
             if block_name:
-                bv2 = mtd['ws'].getRun().getLogData(block_name)#.filtered_value
+                bv2 = mtd['ws'].getRun().getLogData(block_name).value#.filtered_value
                 bval = np.concatenate((bval, bv2))
             print(f'run #{irun} added')
     ADS.remove('ws')
