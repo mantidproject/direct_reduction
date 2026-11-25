@@ -492,7 +492,7 @@ for irun in sample:
             mn, mx = ConvertToMDMinMaxGlobal('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q')
             ConvertToMD('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q_sample', PreprocDetectorsWS='-',
                 MinValues=mn, MaxValues=mx, UseLogTimes=cont_rotation, OverwriteExisting=False,#cont_rotation,
-                OutputWorkspace='ws_md')
+                OutputWorkspace='ws_md', IgnoreZeroSignals=True)
             #if cont_rotation:
             #    print(f'{inst}: Writing continuous {ofile}_MDE.nxs')
             #    SaveMD('ws_md', Filename=f'{ofile}_MDE.nxs')
