@@ -343,7 +343,7 @@ for irun in sample:
     if same_angle_action.lower() != 'ignore' and irun in runs_with_angles_already_seen:
         continue
 
-    print('============')
+    #print('============')
     if not sumruns and (not output_horace or (not cont_rotation and cs_block is None)):
         # Checks rotation angle
         if same_angle_action.lower() != 'ignore':
@@ -362,7 +362,7 @@ for irun in sample:
             AddSampleLog('ws', 'gd_prtn_chrg', str(np.sum(mtd['ws'].getRun().getLogData('proton_charge').value)), 'Number')
         ws = NormaliseByCurrent('ws')
     except RuntimeError:
-        print(f'{inst}: WARNING: Could not normalise run. No integrated current found or current is zero')
+        #print(f'{inst}: WARNING: Could not normalise run. No integrated current found or current is zero')
         ws = mtd['ws']
     if sumruns and sumruns_savemem:
         ws = CompressEvents(ws, Tolerance=1e-5)  # Tolerance in microseconds
@@ -384,7 +384,7 @@ for irun in sample:
         origEi = Ei
         tr  = trans[ienergy]
         mvf = mv_fac[ienergy]
-        print(f'\n{inst}: Reducing data for Ei={Ei:.2f} meV')
+        #print(f'\n{inst}: Reducing data for Ei={Ei:.2f} meV')
 
         # Low energy reps on MARI end up in the second frame
         t_shift = 20000 if inst == 'MARI' and origEi < 3.1 else 0
@@ -398,22 +398,22 @@ for irun in sample:
             ws_rep = CropWorkspace(ws, max(min(tofs), tof_min), min(max(tofs), tof_max))
 
         if sample_cd is not None:
-            print(f'... subtracting Cd background')
+            #print(f'... subtracting Cd background')
             ws_rep = ws_rep - ws_cd
 
         if sample_bg is not None:
-            print(f'... subtracting background - transmission factor = {tr:.2f}')
+            #print(f'... subtracting background - transmission factor = {tr:.2f}')
             ws_rep  = ws_rep/tr - ws_bg
         else:
             ws_rep = Scale('ws_rep', 1 / tr, 'Multiply')
 
         # normalise to WB vanadium and apply fixed mask
-        print('... normalising/masking data')
+        #print('... normalising/masking data')
         ws_rep = Divide('ws_rep', wv_file)       # white beam normalisation
         MaskDetectors(ws_rep, MaskedWorkspace=mask, ForceInstrumentMasking=True)
 
         # t2e section
-        print('... t2e section')
+        #print('... t2e section')
         ws_monitors = mtd['ws_monitors']
         spectra = ws_monitors.getSpectrumNumbers()
         m2pos = ws.detectorInfo().position(spectra.index(m2spec))[2]
@@ -428,11 +428,11 @@ for irun in sample:
 
         if m3spec is not None:
             (Ei,mon2_peak,_,_) = GetEi(ws_monitors,Monitor1Spec=m2spec,Monitor2Spec=m3spec,EnergyEstimate=Ei,FixEi=fixei)
-            print(f'... refined Ei={Ei:.2f} meV')
+            #print(f'... refined Ei={Ei:.2f} meV')
         else:
             (Ei,mon2_peak,_,_) = GetEi(ws_monitors,Monitor2Spec=m2spec,EnergyEstimate=Ei,FixEi=fixei)
 
-        print(f'... m2 tof={mon2_peak:.2f} mus, m2 pos={m2pos:.2f} m')
+        #print(f'... m2 tof={mon2_peak:.2f} mus, m2 pos={m2pos:.2f} m')
 
         ws_rep = ScaleX(ws_rep, Factor=-mon2_peak, Operation='Add', InstrumentParameter='DelayTime', Combine=True)
         MoveInstrumentComponent(ws_rep, ComponentName=source, Z=m2pos, RelativePosition=False)
@@ -446,7 +446,7 @@ for irun in sample:
 
         # monovan scaling
         if mv_file is not None:
-            print(f'... applying mono van calibration factor {mvf:.1f}')
+            #print(f'... applying mono van calibration factor {mvf:.1f}')
         ws_out = Scale('ws_out', mvf, 'Multiply')
 
         # Sets output file name
