@@ -445,8 +445,8 @@ for irun in sample:
         ADS.remove('ws_rep')
 
         # monovan scaling
-        if mv_file is not None:
-            #print(f'... applying mono van calibration factor {mvf:.1f}')
+        #if mv_file is not None:
+        #    print(f'... applying mono van calibration factor {mvf:.1f}')
         ws_out = Scale('ws_out', mvf, 'Multiply')
 
         # Sets output file name
