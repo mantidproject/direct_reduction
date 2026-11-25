@@ -163,13 +163,13 @@ def load_sum(run_list, block_name=None):
             w_buf = CloneWorkspace('ws')
             w_buf_monitors = CloneWorkspace('ws_monitors')
             if block_name:
-                bval = mtd['ws'].getRun().getLogData(block_name).filtered_value
+                bval = mtd['ws'].getRun().getLogData(block_name)#.filtered_value
             print(f'run #{irun} loaded')
         else:
             w_buf = Plus('w_buf', 'ws')
             w_buf_monitors = Plus('w_buf_monitors', 'ws_monitors')
             if block_name:
-                bv2 = mtd['ws'].getRun().getLogData(block_name).filtered_value
+                bv2 = mtd['ws'].getRun().getLogData(block_name)#.filtered_value
                 bval = np.concatenate((bval, bv2))
             print(f'run #{irun} added')
     ADS.remove('ws')
@@ -489,7 +489,8 @@ for irun in sample:
             uvec, vvec = (f'{v[0]},{v[1]},{v[2]}' if isinstance(v, list) else v for v in [sample_pars['u'], sample_pars['v']])
             SetUB('ws_out', a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma, u=uvec, v=vvec)
             CropWorkspaceForMDNorm('ws_out', XMin=Erange[0]*origEi, XMax=Erange[2]*origEi, OutputWorkspace='ws_out')
-            mn, mx = ConvertToMDMinMaxGlobal('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q')
+            mn, mx = ConvertToMDMinMaxLocal('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q_sample')
+            #mn, mx = ConvertToMDMinMaxGlobal('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q')
             ConvertToMD('ws_out', QDimensions='Q3D', dEAnalysisMode='Direct', Q3DFrames='Q_sample', PreprocDetectorsWS='-',
                 MinValues=mn, MaxValues=mx, UseLogTimes=False, OverwriteExisting=False, IgnoreZeroSignals=True,
                 OutputWorkspace='ws_md')
