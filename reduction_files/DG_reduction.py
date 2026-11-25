@@ -438,9 +438,9 @@ for irun in sample:
         MoveInstrumentComponent(ws_rep, ComponentName=source, Z=m2pos, RelativePosition=False)
 
         ws_rep = ConvertUnits(ws_rep, 'DeltaE', EMode='Direct', EFixed=Ei)
-        ws_out = Rebin(ws_rep, [x*origEi for x in Erange], PreserveEvents=False)#(not output_horace))
-        if True:#output_horace:
-            ws_out = DetectorEfficiencyCor(ws_out, IncidentEnergy=Ei)
+        ws_out = Rebin(ws_rep, [x*origEi for x in Erange], PreserveEvents=True)#(not output_horace))
+        #if output_horace:
+        #    ws_out = DetectorEfficiencyCor(ws_out, IncidentEnergy=Ei)
         ws_out = CorrectKiKf(ws_out, Efixed=Ei, EMode='Direct')
         ADS.remove('ws_rep')
 
